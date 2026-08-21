@@ -2,7 +2,7 @@ groups:
   - name: checkout-demo
     rules:
       - alert: CheckoutFailuresDetected
-        expr: increase(otel_demo_checkout_failures_total[1m]) > 0
+        expr: increase(checkout_request_duration_seconds_count{http_response_status_code="500"}[1m]) > 0
         for: 0m
         labels:
           severity: warning

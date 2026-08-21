@@ -11,12 +11,10 @@ This Node.js observability demo contains checkout and inventory services in `app
 - `npm start`: run checkout on port 3000 and inventory on port 3002.
 - `npm run check`: perform JavaScript syntax checks.
 - `npm run test:smoke`: verify traces, logs, baggage, exemplars, alerts, and health filtering.
+- `npm run test:scenarios`: verify slow, MySQL-error, and Redis-error troubleshooting paths.
 - `npm run traffic`: continuously generate demo traffic and print direct observability links.
 - `docker compose config --quiet`: validate Compose configuration.
-- `npm run infra:status`: inspect local service health and state.
 - `npm run infra:down`: stop the stack while retaining named-volume data.
-
-Exercise both paths with `curl http://localhost:3000/checkout` and `curl 'http://localhost:3000/checkout?fail=true'`.
 
 ## Coding Style & Naming Conventions
 
@@ -28,7 +26,7 @@ There is no unit-test framework or coverage threshold. Every change must pass `n
 
 ## Commit & Pull Request Guidelines
 
-Git history is unavailable in this workspace, so no repository-specific convention can be inferred. Use short, imperative commit subjects, optionally following Conventional Commits (for example, `feat: add payment span`). Keep commits focused. Pull requests should explain the behavior and telemetry impact, list validation commands, link relevant issues, and include screenshots for dashboard or provisioning changes. Do not commit secrets, generated telemetry data, or local volume contents.
+History uses short subjects such as `init` and concise Chinese descriptions. Keep commits focused and use an imperative summary. Pull requests should explain behavior and telemetry impact, list validation commands, link relevant issues, and include screenshots for dashboard changes. Do not commit secrets, generated telemetry data, or local volume contents.
 
 ## Security & Configuration
 

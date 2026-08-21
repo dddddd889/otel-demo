@@ -20,7 +20,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: sum(increase(otel_demo_checkout_failures_total[1m]))
+              expr: sum(increase(checkout_request_duration_seconds_count{http_response_status_code="500"}[1m]))
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200

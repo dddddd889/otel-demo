@@ -3,7 +3,7 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
 const { createClient } = require('redis');
-const { propagation, context, trace } = require('@opentelemetry/api');
+const { propagation, context, trace, SpanStatusCode } = require('@opentelemetry/api');
 const { createTelemetryLogger } = require('./telemetry-logger');
 
 // 库存服务及其依赖配置。
@@ -19,6 +19,12 @@ const mysqlPool = mysql.createPool({
   database: process.env.MYSQL_DATABASE || 'otel_demo',
   connectionLimit: 4,
 });
+const supportedFailureModes = new Set(['db-error', 'redis-error']);
+
+// 将公开查询参数限制为固定枚举，防止遥测属性产生无限基数。
+function getFailureMode(value) {
+  return supportedFailureModes.has(value) ? value : 'none';
+}
 
 // Redis 会通过 EventEmitter 报告后台连接错误；监听后由后续请求触发重连。
 redisClient.on('error', (error) => {
@@ -52,6 +58,7 @@ app.get('/health', (request, response) => {
 
 app.get('/inventory/:sku', async (request, response) => {
   const sku = request.params.sku;
+  const failureMode = getFailureMode(request.query.failure);
   const baggage = propagation.getBaggage(context.active());
   const cartId = baggage?.getEntry('demo.cart.id')?.value;
   const tenantId = baggage?.getEntry('demo.tenant.id')?.value;
@@ -59,8 +66,12 @@ app.get('/inventory/:sku', async (request, response) => {
   try {
     const redis = await getRedisClient();
     const cacheKey = `inventory:${sku}`;
-    const cachedStock = await redis.get(cacheKey);
-    const [rows] = await mysqlPool.execute('SELECT stock FROM inventory WHERE sku = ?', [sku]);
+    const cachedStock = failureMode === 'redis-error'
+      ? await redis.sendCommand(['GET'])
+      : await redis.get(cacheKey);
+    const [rows] = failureMode === 'db-error'
+      ? await mysqlPool.execute('SELECT missing_stock FROM inventory WHERE sku = ?', [sku])
+      : await mysqlPool.execute('SELECT stock FROM inventory WHERE sku = ?', [sku]);
     const stock = rows[0]?.stock ?? Number(cachedStock ?? 0);
 
     await redis.setEx(cacheKey, 30, String(stock));
@@ -70,13 +81,24 @@ app.get('/inventory/:sku', async (request, response) => {
       'demo.inventory.sku': sku,
       'demo.inventory.stock': stock,
       'demo.inventory.cache_present': cachedStock !== null,
+      'demo.scenario': failureMode,
     });
 
     response.json({ sku, stock, cachePresent: cachedStock !== null });
   } catch (error) {
     const activeSpan = trace.getActiveSpan();
     activeSpan?.recordException(error);
-    response.status(503).json({ error: error.message });
+    activeSpan?.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    activeSpan?.setAttribute('demo.scenario', failureMode);
+    writeLog('ERROR', '库存查询失败', {
+      'demo.cart.id': cartId || 'missing',
+      'demo.tenant.id': tenantId || 'missing',
+      'demo.inventory.sku': sku,
+      'demo.scenario': failureMode,
+      'error.type': error.name,
+      'error.message': error.message,
+    });
+    response.status(503).json({ error: error.message, scenario: failureMode });
   }
 });
 

@@ -18,7 +18,7 @@ const grafanaPublicUrl = process.env.GRAFANA_PUBLIC_URL || 'http://localhost:300
 const prometheusPublicUrl = process.env.PROMETHEUS_PUBLIC_URL || 'http://localhost:9090';
 
 // 根据当前 Trace ID 生成可直接打开的可观测性查询链接。
-function createObservabilityLinks(traceId) {
+function createObservabilityLinks(traceId, scenario) {
   const lokiExpression = `{service_name=~"checkout-service|inventory-service"} |= "${traceId}"`;
   const exploreState = {
     traceLogs: {
@@ -27,7 +27,7 @@ function createObservabilityLinks(traceId) {
       range: { from: 'now-15m', to: 'now' },
     },
   };
-  const prometheusExpression = 'checkout_request_duration_seconds_count';
+  const prometheusExpression = `checkout_request_duration_seconds_count{demo_scenario="${scenario}"}`;
 
   return {
     traceId,
@@ -38,13 +38,30 @@ function createObservabilityLinks(traceId) {
   };
 }
 
+// 将查询参数归一化为固定场景名，避免遥测属性产生无限基数。
+function getScenario(query) {
+  if (query.slow === 'true') {
+    return 'slow';
+  }
+  if (query.dbError === 'true') {
+    return 'db-error';
+  }
+  if (query.redisError === 'true') {
+    return 'redis-error';
+  }
+  if (query.fail === 'true') {
+    return 'business-error';
+  }
+  return 'normal';
+}
+
 // OpenMetrics 注册表：专门演示带 Trace ID 的 Prometheus Exemplar。
 const prometheusRegistry = new Registry();
 prometheusRegistry.setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
 const exemplarRequestDuration = new Histogram({
   name: 'checkout_request_duration_seconds',
   help: '结账请求耗时，附带可跳转 Trace 的 Exemplar',
-  labelNames: ['http_request_method', 'http_route', 'http_response_status_code'],
+  labelNames: ['http_request_method', 'http_route', 'http_response_status_code', 'demo_scenario'],
   buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
   enableExemplars: true,
   registers: [prometheusRegistry],
@@ -89,9 +106,14 @@ async function runStep(spanName, duration, attributes = {}) {
 }
 
 // 调用库存服务；Node.js HTTP 自动插桩会注入 traceparent 和 baggage 请求头。
-function queryInventory() {
+function queryInventory(scenario) {
   return new Promise((resolve, reject) => {
-    const request = http.get(inventoryUrl, (response) => {
+    const requestUrl = new URL(inventoryUrl);
+    if (scenario === 'db-error' || scenario === 'redis-error') {
+      requestUrl.searchParams.set('failure', scenario);
+    }
+
+    const request = http.get(requestUrl, (response) => {
       let body = '';
 
       response.setEncoding('utf8');
@@ -143,6 +165,7 @@ app.use((request, response, next) => {
       'http.request.method': request.method,
       'http.route': request.route?.path || request.path,
       'http.response.status_code': response.statusCode,
+      'demo.scenario': getScenario(request.query),
     };
 
     // 使用请求开始时的上下文记录指标，使 Histogram Exemplar 携带 Trace ID。
@@ -156,6 +179,7 @@ app.use((request, response, next) => {
           http_request_method: request.method,
           http_route: request.route?.path || request.path,
           http_response_status_code: String(response.statusCode),
+          demo_scenario: getScenario(request.query),
         },
         value: durationMilliseconds / 1000,
         exemplarLabels: spanContext ? {
@@ -172,7 +196,14 @@ app.use((request, response, next) => {
 app.get('/', (request, response) => {
   response.json({
     message: 'OpenTelemetry Node.js Demo',
-    endpoints: ['/checkout', '/checkout?fail=true', '/health'],
+    endpoints: [
+      '/checkout',
+      '/checkout?slow=true',
+      '/checkout?dbError=true',
+      '/checkout?redisError=true',
+      '/checkout?fail=true',
+      '/health',
+    ],
     interfaces: {
       jaeger: jaegerPublicUrl,
       grafana: grafanaPublicUrl,
@@ -198,31 +229,43 @@ app.get('/checkout', async (request, response) => {
     'demo.tenant.id': { value: 'demo-shop' },
   });
   const baggageContext = propagation.setBaggage(context.active(), baggage);
+  const scenario = getScenario(request.query);
 
   return context.with(baggageContext, async () => {
     const traceId = trace.getActiveSpan()?.spanContext().traceId;
-    const observability = traceId ? createObservabilityLinks(traceId) : undefined;
+    const observability = traceId ? createObservabilityLinks(traceId, scenario) : undefined;
+    const activeSpan = trace.getActiveSpan();
+    activeSpan?.setAttribute('demo.scenario', scenario);
 
     try {
       writeLog('INFO', '开始处理结账请求', {
         'demo.cart.id': cartId,
         'demo.cart.item_count': 3,
+        'demo.scenario': scenario,
       });
       await runStep('validate-cart', 80, {
         'demo.cart.id': cartId,
         'demo.cart.item_count': 3,
       });
 
-      const inventory = await queryInventory();
+      const inventory = await queryInventory(scenario);
 
-      if (request.query.fail === 'true') {
+      if (scenario === 'business-error') {
         throw new Error('模拟库存不足');
+      }
+
+      if (scenario === 'slow') {
+        await runStep('simulate-slow-checkout', 1200, {
+          'demo.scenario': scenario,
+          'demo.delay.ms': 1200,
+        });
       }
 
       await runStep('create-order', 160, {
         'demo.order.currency': 'CNY',
         'demo.order.amount': 199,
         'demo.inventory.stock': inventory.stock,
+        'demo.scenario': scenario,
       });
 
       writeLog('INFO', '订单创建成功', {
@@ -234,21 +277,27 @@ app.get('/checkout', async (request, response) => {
       response.json({
         orderId: `order-${Date.now()}`,
         status: 'created',
+        scenario,
         inventory,
         observability,
       });
     } catch (error) {
-      const activeSpan = trace.getActiveSpan();
       activeSpan?.recordException(error);
       activeSpan?.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
-      checkoutFailureCounter.add(1, { 'error.type': error.name });
+      activeSpan?.setAttribute('demo.scenario', scenario);
+      checkoutFailureCounter.add(1, {
+        'error.type': error.name,
+        'demo.scenario': scenario,
+      });
       writeLog('ERROR', '创建订单失败', {
         'demo.cart.id': cartId,
         'error.type': error.name,
         'error.message': error.message,
+        'demo.scenario': scenario,
       });
       response.status(500).json({
         error: error.message,
+        scenario,
         observability,
       });
     }

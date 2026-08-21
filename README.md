@@ -80,13 +80,23 @@ X-Trace-Id: 0123456789abcdef0123456789abcdef
 curl -i 'http://localhost:3000/checkout?fail=true'
 ```
 
-持续产生约 20% 失败流量，并为每条请求打印 Jaeger、Grafana 和 Prometheus 直达链接：
+持续轮流产生正常、慢请求、数据库错误、Redis 错误和业务错误，并为每条请求打印 Jaeger、Grafana 和 Prometheus 直达链接：
 
 ```bash
 npm run traffic
 ```
 
 按 `Ctrl+C` 停止造数。不要在 `curl` 后添加 `>/dev/null`，它会丢弃包含查询链接的响应。
+
+### 可控故障场景
+
+| 场景 | 请求 | 预期结果 |
+| --- | --- | --- |
+| 正常 | `curl http://localhost:3000/checkout` | HTTP 200 |
+| 慢请求 | `curl 'http://localhost:3000/checkout?slow=true'` | HTTP 200，新增约 1.2 秒 Span |
+| MySQL 错误 | `curl 'http://localhost:3000/checkout?dbError=true'` | HTTP 500，SQL Span 标记错误 |
+| Redis 错误 | `curl 'http://localhost:3000/checkout?redisError=true'` | HTTP 500，Redis Span 标记错误 |
+| 业务错误 | `curl 'http://localhost:3000/checkout?fail=true'` | HTTP 500，根 Span 标记错误 |
 
 ## 3. Trace 与跨服务传播
 
@@ -109,11 +119,13 @@ GET /checkout                         checkout-service
 Prometheus 常用查询：
 
 ```promql
-sum(otel_demo_checkout_requests_total)
+sum(checkout_request_duration_seconds_count)
 ```
 
 ```promql
-sum by (http_response_status_code) (otel_demo_checkout_requests_total)
+sum by (demo_scenario, http_response_status_code) (
+  checkout_request_duration_seconds_count
+)
 ```
 
 ```promql
@@ -126,6 +138,20 @@ histogram_quantile(
 ```
 
 应用同时通过 OTLP 记录标准指标，并在 `/metrics` 暴露一个 OpenMetrics Histogram 用于演示 Exemplar。Prometheus 直接抓取该端点；Grafana 的“请求耗时 P95”面板已启用 Exemplar，将鼠标移到数据点并点击 Exemplar 可跳转到 Jaeger。
+
+### 一次完整排障练习
+
+1. 执行 `npm run traffic`，在 Grafana Dashboard 查看按 `demo_scenario` 分组的请求速率和 P95。
+2. 在“请求耗时 P95”曲线上找到 `slow`，点击数据点的 Exemplar 跳转 Jaeger。
+3. 在 Jaeger 中找到 `simulate-slow-checkout`；错误场景则查看红色的 SQL、Redis 或根 Span。
+4. 复制 Trace ID，在 Grafana Loki 查询 `{service_name=~"checkout-service|inventory-service"} |= "TRACE_ID"`。
+5. 展开日志，检查 `demo_scenario`、`error.type`、`error.message` 和 `timestamp_zh_cn`。
+
+自动验证全部故障链路：
+
+```bash
+npm run test:scenarios
+```
 
 Prometheus 告警规则位于 `prometheus-alerts.yaml`：
 
