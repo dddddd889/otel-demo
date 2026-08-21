@@ -3,6 +3,7 @@
 这是一个 Node.js + OpenTelemetry 可观测性示例，通过 Jaeger、Prometheus、Loki 和 Grafana 统一体验分布式链路、指标、日志及三者关联。
 
 按 Git 提交拆分的改动、测试和学习文档见 [按 Commit 学习 OpenTelemetry Demo](docs/commit-history/README.md)。
+异步消息按五个独立学习 commit 递进，见 [异步消息传播学习路线](docs/async-messaging/README.md)。
 
 ```text
 客户端 → checkout-service:3000 → inventory-service:3002
@@ -57,6 +58,7 @@ curl http://localhost:3000/health
 | Prometheus | <http://localhost:9090> | Metric 和规则告警 |
 | Loki API | <http://localhost:3100> | Log 存储，无独立 UI |
 | Grafana | <http://localhost:3001> | 统一查询和 Dashboard |
+| RabbitMQ | <http://localhost:15672> | 消息队列管理，账号 `otel` / `otel-demo` |
 
 Grafana 管理员账号为 `admin` / `admin`；匿名访问只有 Viewer 权限。
 
@@ -249,7 +251,24 @@ docker compose logs -f otel-collector
 
 预置配置启用了 `allowUiUpdates`。使用 `admin` 登录后可直接编辑和保存，也可通过 **Save as** 创建实验副本。
 
-## 9. 检查与清理
+## 9. RabbitMQ 基础消息流
+
+当前只实现独立 Producer → RabbitMQ → Consumer，用于学习队列、确认和持久化；尚未接入 checkout 或 OpenTelemetry 异步链路。
+
+```bash
+# 终端 1
+npm run rabbitmq:consumer
+
+# 终端 2
+npm run rabbitmq:producer -- order-learning-001
+
+# 自动验证一次完整收发
+npm run test:rabbitmq
+```
+
+管理界面：<http://localhost:15672>。完整改动边界和学习点见 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)。
+
+## 10. 检查与清理
 
 ```bash
 npm run check

@@ -27,6 +27,22 @@ services:
       timeout: 3s
       retries: 20
 
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: otel
+      RABBITMQ_DEFAULT_PASS: otel-demo
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
   jaeger:
     image: jaegertracing/jaeger:2.11.0
     environment:
@@ -95,3 +111,4 @@ volumes:
   prometheus-data:
   loki-data:
   grafana-data:
+  rabbitmq-data:
