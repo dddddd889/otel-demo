@@ -9,7 +9,7 @@
 | 3 | `8a0461b` | 可控故障与排障练习 | [03-8a0461b-troubleshooting.md](03-8a0461b-troubleshooting.md) |
 | 4 | 尚未提交 | 智能尾采样与 Metric 高基数治理 | [04-working-tree-sampling.md](04-working-tree-sampling.md) |
 
-异步消息使用另一条递进学习线，见 [异步消息传播学习路线](../async-messaging/README.md)。RabbitMQ 基础消息流已形成 commit `8764dce`；checkout 到 payment-service 正在工作区实现。
+异步消息使用另一条递进学习线，见 [异步消息传播学习路线](../async-messaging/README.md)。RabbitMQ 基础流为 `8764dce`，checkout 到 payment-service 为 `9770baf`；异步上下文传播正在工作区实现。
 
 ## 推荐学习方式
 
@@ -17,4 +17,4 @@
 
 ## 异步能力边界
 
-当前已有独立 RabbitMQ 基础流，以及工作区中的 checkout 发布订单和 payment-service 消费。异步 Trace Context、Producer/Consumer Span、Span Link、重试和死信队列仍未实现，不能写成已完成能力。
+当前已有 RabbitMQ 基础流、checkout 发布和 payment-service 消费，工作区还实现了异步 Trace Context 与 Baggage。Producer/Consumer Span、Span Link、重试和死信队列仍未实现，不能写成已完成能力。

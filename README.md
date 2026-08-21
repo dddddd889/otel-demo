@@ -9,7 +9,7 @@
 客户端 → checkout-service:3000 → inventory-service:3002
           │                           ├─ Redis
           │                           └─ MySQL
-          └─ RabbitMQ → payment-service（异步，暂未接入 OTel 上下文）
+          └─ RabbitMQ → payment-service（通过消息 Header 传播 OTel 上下文）
 
 两个应用进程 ── OTLP/HTTP ──> OpenTelemetry Collector
                                 ├─ Trace  ─> Jaeger
@@ -23,7 +23,7 @@ Grafana ──> Prometheus + Loki + Jaeger
 
 - Node.js HTTP、Express、Redis、MySQL 自动插桩
 - `validate-cart`、`create-order` 等业务 Span 手动插桩
-- 跨进程 W3C Trace Context 与 Baggage 传播
+- 跨 HTTP 和 RabbitMQ 的 W3C Trace Context 与 Baggage 传播
 - `X-Trace-Id` 响应头，可立即定位单次请求
 - Trace、Metric、Log 通过 OTLP 统一发送到 Collector
 - Collector 内存保护、批处理、资源属性补充和智能尾采样
@@ -149,7 +149,7 @@ histogram_quantile(
 1. 执行 `npm run traffic`，在 Grafana Dashboard 查看按 `demo_scenario` 分组的请求速率和 P95。
 2. 在“请求耗时 P95”曲线上找到 `slow`，点击数据点的 Exemplar 跳转 Jaeger。
 3. 在 Jaeger 中找到 `simulate-slow-checkout`；错误场景则查看红色的 SQL、Redis 或根 Span。
-4. 复制 Trace ID，在 Grafana Loki 查询 `{service_name=~"checkout-service|inventory-service"} |= "TRACE_ID"`。
+4. 复制 Trace ID，在 Grafana Loki 查询 `{service_name=~"checkout-service|inventory-service|payment-service"} |= "TRACE_ID"`。
 5. 展开日志，检查 `demo_scenario`、`error.type`、`error.message` 和 `timestamp_zh_cn`。
 
 自动验证全部故障链路：
@@ -170,7 +170,7 @@ Prometheus 告警规则位于 `prometheus-alerts.yaml`：
 在 Grafana **Explore** 选择 Loki：
 
 ```logql
-{service_name=~"checkout-service|inventory-service"}
+{service_name=~"checkout-service|inventory-service|payment-service"}
 ```
 
 只看错误：
@@ -182,7 +182,7 @@ Prometheus 告警规则位于 `prometheus-alerts.yaml`：
 按 Trace ID 查询：
 
 ```logql
-{service_name=~"checkout-service|inventory-service"}
+{service_name=~"checkout-service|inventory-service|payment-service"}
   |= "0123456789abcdef0123456789abcdef"
 ```
 
@@ -254,7 +254,7 @@ docker compose logs -f otel-collector
 
 ## 9. RabbitMQ 基础消息流
 
-当前已实现 checkout → RabbitMQ → payment-service：checkout 返回 `paymentStatus: queued`，支付服务异步处理并 ACK。OpenTelemetry 异步上下文传播尚未加入。
+当前已实现 checkout → RabbitMQ → payment-service：消息 Header 携带 `traceparent` 与 Baggage，支付日志可用原 Trace ID 在 Loki 中关联；消息 Span 将在下一学习 commit 加入。
 
 ```bash
 # 终端 1：启动 checkout 与 inventory
@@ -267,7 +267,7 @@ npm run start:payment
 curl -s http://localhost:3000/checkout
 ```
 
-管理界面：<http://localhost:15672>。先学习 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)，再操作 [Commit 2：checkout 到 payment-service](docs/async-messaging/02-payment-service.md)。
+管理界面：<http://localhost:15672>。依次学习 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)、[Commit 2：checkout 到 payment-service](docs/async-messaging/02-payment-service.md) 和 [Commit 3：异步上下文传播](docs/async-messaging/03-context-propagation.md)。
 
 ## 10. 检查与清理
 

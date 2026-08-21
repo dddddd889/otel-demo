@@ -1,6 +1,7 @@
 'use strict';
 
 const { connectRabbitMQ, ensureQueue, orderQueue } = require('./rabbitmq-client');
+const { injectMessageContext } = require('./message-context');
 
 let connection;
 let connectionPromise;
@@ -72,9 +73,11 @@ async function getConfirmChannel() {
 // 发布订单并等待 Broker Confirm，但不等待 payment-service 完成支付。
 async function publishOrder(orderMessage) {
   const channel = await getConfirmChannel();
+  const headers = injectMessageContext();
   channel.sendToQueue(orderQueue, Buffer.from(JSON.stringify(orderMessage)), {
     persistent: true,
     contentType: 'application/json',
+    headers,
   });
   await channel.waitForConfirms();
 }

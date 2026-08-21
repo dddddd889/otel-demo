@@ -9,6 +9,7 @@ const { BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
 const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
+const { runShutdownHooks } = require('./shutdown-coordinator');
 
 // 链路导出器：通过 OTLP/HTTP 把 Span 发给 OpenTelemetry Collector。
 const traceExporter = new OTLPTraceExporter({
@@ -52,6 +53,7 @@ async function shutdownTelemetry() {
   let exitCode = 0;
 
   try {
+    await runShutdownHooks();
     await telemetrySdk.shutdown();
     console.log('OpenTelemetry SDK 已关闭');
   } catch (error) {

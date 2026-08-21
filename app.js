@@ -9,6 +9,7 @@ const { createTelemetryLogger } = require('./telemetry-logger');
 const { createOrderMessage } = require('./messaging/order-message');
 const { orderQueue } = require('./messaging/rabbitmq-client');
 const { closeOrderPublisher, publishOrder } = require('./messaging/order-publisher');
+const { registerShutdownHook } = require('./shutdown-coordinator');
 
 // 结账服务的基础配置。
 const app = express();
@@ -23,7 +24,7 @@ const prometheusPublicUrl = process.env.PROMETHEUS_PUBLIC_URL || 'http://localho
 
 // 根据当前 Trace ID 生成可直接打开的可观测性查询链接。
 function createObservabilityLinks(traceId, scenario) {
-  const lokiExpression = `{service_name=~"checkout-service|inventory-service"} |= "${traceId}"`;
+  const lokiExpression = `{service_name=~"checkout-service|inventory-service|payment-service"} |= "${traceId}"`;
   const exploreState = {
     traceLogs: {
       datasource: 'loki',
@@ -327,14 +328,16 @@ async function shutdownApplication() {
     return;
   }
   shuttingDown = true;
-  server.close(async (error) => {
-    await closeOrderPublisher();
-    if (error) {
-      console.error('关闭结账 HTTP 服务失败：', error.message);
-      process.exitCode = 1;
-    }
+  await new Promise((resolve) => {
+    server.close(async (error) => {
+      await closeOrderPublisher();
+      if (error) {
+        console.error('关闭结账 HTTP 服务失败：', error.message);
+        process.exitCode = 1;
+      }
+      resolve();
+    });
   });
 }
 
-process.once('SIGINT', shutdownApplication);
-process.once('SIGTERM', shutdownApplication);
+registerShutdownHook(shutdownApplication);

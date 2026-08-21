@@ -1,7 +1,13 @@
 'use strict';
 
 const { randomUUID } = require('crypto');
+const { context, propagation, trace } = require('@opentelemetry/api');
 const { connectRabbitMQ, ensureQueue, orderQueue } = require('./messaging/rabbitmq-client');
+const { extractMessageContext } = require('./messaging/message-context');
+const { createTelemetryLogger } = require('./telemetry-logger');
+const { registerShutdownHook } = require('./shutdown-coordinator');
+
+const writeLog = createTelemetryLogger('payment-demo', '1.0.0');
 
 // 校验订单消息并生成最小支付结果；下一学习提交再加入 Trace Context。
 async function processOrderMessage(orderMessage) {
@@ -62,40 +68,58 @@ async function startPaymentService() {
         return;
       }
 
-      let orderMessage;
-      let payment;
-      try {
-        orderMessage = JSON.parse(message.content.toString('utf8'));
-        console.log(`payment-service 开始处理订单：${orderMessage.orderId || '未知订单'}`);
-        payment = await processOrderMessage(orderMessage);
-        console.log('payment-service 支付完成：');
-        console.log(JSON.stringify(payment, null, 2));
-      } catch (error) {
-        console.error('payment-service 拒绝订单消息：', error.message);
+      const messageContext = extractMessageContext(message.properties.headers);
+      await context.with(messageContext, async () => {
+        let orderMessage;
+        let payment;
         try {
-          channel.nack(message, false, false);
+          orderMessage = JSON.parse(message.content.toString('utf8'));
+          const spanContext = trace.getSpanContext(context.active());
+          const baggage = propagation.getBaggage(context.active());
+          const cartId = baggage?.getEntry('demo.cart.id')?.value;
+          const tenantId = baggage?.getEntry('demo.tenant.id')?.value;
+          console.log(`payment-service 恢复消息上下文：trace_id=${spanContext?.traceId || '无'} cart_id=${cartId || '无'} tenant_id=${tenantId || '无'}`);
+          console.log(`payment-service 开始处理订单：${orderMessage.orderId || '未知订单'}`);
+          payment = await processOrderMessage(orderMessage);
+          console.log('payment-service 支付完成：');
+          console.log(JSON.stringify(payment, null, 2));
+          const logAttributes = {
+            'demo.order.id': payment.orderId,
+            'demo.payment.id': payment.paymentId,
+          };
+          if (cartId) {
+            logAttributes['demo.cart.id'] = cartId;
+          }
+          if (tenantId) {
+            logAttributes['demo.tenant.id'] = tenantId;
+          }
+          writeLog('INFO', '异步支付完成', logAttributes);
+        } catch (error) {
+          console.error('payment-service 拒绝订单消息：', error.message);
+          try {
+            channel.nack(message, false, false);
+          } catch (channelError) {
+            console.error('payment-service NACK 失败：', channelError.message);
+            await shutdown(1);
+          }
+          return;
+        }
+
+        try {
+          channel.ack(message);
+          console.log(`payment-service 已 ACK：${payment.orderId}`);
         } catch (channelError) {
-          console.error('payment-service NACK 失败：', channelError.message);
+          console.error('payment-service ACK 失败：', channelError.message);
           await shutdown(1);
         }
-        return;
-      }
-
-      try {
-        channel.ack(message);
-        console.log(`payment-service 已 ACK：${payment.orderId}`);
-      } catch (channelError) {
-        console.error('payment-service ACK 失败：', channelError.message);
-        await shutdown(1);
-      }
+      });
     }, { noAck: false });
   } catch (error) {
     await shutdown(1);
     throw error;
   }
 
-  process.once('SIGINT', () => shutdown(0));
-  process.once('SIGTERM', () => shutdown(0));
+  registerShutdownHook(() => shutdown(0));
 }
 
 if (require.main === module) {

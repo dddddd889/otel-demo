@@ -15,6 +15,7 @@ Checkout, inventory, and payment services live in `app.js`, `inventory-service.j
 - `npm run test:scenarios`: verify slow, MySQL-error, and Redis-error troubleshooting paths.
 - `npm run test:sampling`: verify tail-sampling decisions and stable metric labels.
 - `npm run test:rabbitmq`: verify one isolated publish, consume, and ACK cycle.
+- `npm run test:message-context`: verify W3C context across AMQP headers.
 - `npm run rabbitmq:producer` / `npm run rabbitmq:consumer`: exercise the queue manually.
 - `npm run traffic`: continuously generate demo traffic and print direct observability links.
 - `docker compose config --quiet`: validate Compose configuration.
