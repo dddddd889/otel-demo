@@ -7,8 +7,9 @@
 
 ```text
 客户端 → checkout-service:3000 → inventory-service:3002
-                                      ├─ Redis
-                                      └─ MySQL
+          │                           ├─ Redis
+          │                           └─ MySQL
+          └─ RabbitMQ → payment-service（异步，暂未接入 OTel 上下文）
 
 两个应用进程 ── OTLP/HTTP ──> OpenTelemetry Collector
                                 ├─ Trace  ─> Jaeger
@@ -253,20 +254,20 @@ docker compose logs -f otel-collector
 
 ## 9. RabbitMQ 基础消息流
 
-当前只实现独立 Producer → RabbitMQ → Consumer，用于学习队列、确认和持久化；尚未接入 checkout 或 OpenTelemetry 异步链路。
+当前已实现 checkout → RabbitMQ → payment-service：checkout 返回 `paymentStatus: queued`，支付服务异步处理并 ACK。OpenTelemetry 异步上下文传播尚未加入。
 
 ```bash
-# 终端 1
-npm run rabbitmq:consumer
+# 终端 1：启动 checkout 与 inventory
+npm start
 
-# 终端 2
-npm run rabbitmq:producer -- order-learning-001
+# 终端 2：启动异步支付消费者
+npm run start:payment
 
-# 自动验证一次完整收发
-npm run test:rabbitmq
+# 终端 3：创建订单并发布支付消息
+curl -s http://localhost:3000/checkout
 ```
 
-管理界面：<http://localhost:15672>。完整改动边界和学习点见 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)。
+管理界面：<http://localhost:15672>。先学习 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)，再操作 [Commit 2：checkout 到 payment-service](docs/async-messaging/02-payment-service.md)。
 
 ## 10. 检查与清理
 

@@ -1,10 +1,14 @@
 'use strict';
 
 const http = require('http');
+const { randomUUID } = require('crypto');
 const express = require('express');
 const { Histogram, Registry } = require('prom-client');
 const { context, metrics, propagation, trace, SpanStatusCode } = require('@opentelemetry/api');
 const { createTelemetryLogger } = require('./telemetry-logger');
+const { createOrderMessage } = require('./messaging/order-message');
+const { orderQueue } = require('./messaging/rabbitmq-client');
+const { closeOrderPublisher, publishOrder } = require('./messaging/order-publisher');
 
 // 结账服务的基础配置。
 const app = express();
@@ -268,6 +272,10 @@ app.get('/checkout', async (request, response) => {
         'demo.scenario': scenario,
       });
 
+      const orderId = `order-${randomUUID()}`;
+      const orderMessage = createOrderMessage(orderId, { scenario });
+      await publishOrder(orderMessage);
+
       writeLog('INFO', '订单创建成功', {
         'demo.cart.id': cartId,
         'demo.order.amount': 199,
@@ -275,8 +283,10 @@ app.get('/checkout', async (request, response) => {
       });
 
       response.json({
-        orderId: `order-${Date.now()}`,
+        orderId,
         status: 'created',
+        paymentStatus: 'queued',
+        messageQueue: orderQueue,
         scenario,
         inventory,
         observability,
@@ -304,7 +314,27 @@ app.get('/checkout', async (request, response) => {
   });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   writeLog('INFO', `结账服务已启动：http://localhost:${port}`);
   console.log('Grafana：http://localhost:3001');
 });
+
+let shuttingDown = false;
+
+// 退出时先停止接收 HTTP 请求，再关闭进程级 RabbitMQ 发布连接。
+async function shutdownApplication() {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  server.close(async (error) => {
+    await closeOrderPublisher();
+    if (error) {
+      console.error('关闭结账 HTTP 服务失败：', error.message);
+      process.exitCode = 1;
+    }
+  });
+}
+
+process.once('SIGINT', shutdownApplication);
+process.once('SIGTERM', shutdownApplication);

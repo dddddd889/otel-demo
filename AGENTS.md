@@ -2,13 +2,14 @@
 
 ## Project Structure & Module Organization
 
-Checkout and inventory services live in `app.js` and `inventory-service.js`; `start-services.js` runs both. `instrumentation.js` initializes OpenTelemetry first, and `telemetry-logger.js` centralizes correlated logs. RabbitMQ examples live in `messaging/`, checks in `scripts/`, and learning notes in `docs/`. Compose and backend configuration live in the root; Grafana assets are under `grafana/`.
+Checkout, inventory, and payment services live in `app.js`, `inventory-service.js`, and `payment-service.js`; `start-services.js` runs the HTTP services. `instrumentation.js` initializes OpenTelemetry first, and `telemetry-logger.js` centralizes correlated logs. RabbitMQ contracts live in `messaging/`, checks in `scripts/` and `test/`, and learning notes in `docs/`.
 
 ## Build, Test, and Development Commands
 
 - `npm install`: install the locked Node.js dependencies. Use Node.js 20 or newer.
 - `npm run infra:up`: start all infrastructure, including RabbitMQ and its management UI.
 - `npm start`: run checkout on port 3000 and inventory on port 3002.
+- `npm run start:payment`: consume queued orders and print payment results.
 - `npm run check`: perform JavaScript syntax checks.
 - `npm run test:smoke`: verify traces, logs, baggage, exemplars, alerts, and health filtering.
 - `npm run test:scenarios`: verify slow, MySQL-error, and Redis-error troubleshooting paths.

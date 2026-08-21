@@ -1,17 +1,7 @@
 'use strict';
 
 const { connectRabbitMQ, orderQueue, publishJson } = require('./rabbitmq-client');
-
-// 根据命令行参数创建一条最小订单消息。
-function createOrderMessage(orderId) {
-  return {
-    messageId: `message-${Date.now()}`,
-    orderId,
-    amount: 199,
-    currency: 'CNY',
-    createdAt: new Date().toISOString(),
-  };
-}
+const { createOrderMessage } = require('./order-message');
 
 // 连接 Broker、发布一条消息并在确认后退出。
 async function main() {
