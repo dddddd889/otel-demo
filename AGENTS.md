@@ -2,12 +2,12 @@
 
 ## Project Structure & Module Organization
 
-Checkout, inventory, and payment services live in `app.js`, `inventory-service.js`, and `payment-service.js`; `start-services.js` runs the HTTP services. `instrumentation.js` initializes OpenTelemetry first, and `telemetry-logger.js` centralizes correlated logs. RabbitMQ contracts live in `messaging/`, checks in `scripts/` and `test/`, and learning notes in `docs/`.
+Checkout, inventory, and payment live in `app.js`, `inventory-service.js`, and `payment-service.js`; `start-services.js` runs HTTP services. `instrumentation.js` initializes OpenTelemetry first, and `telemetry-logger.js` centralizes logs. RabbitMQ code lives in `messaging/`, checks in `scripts/` and `test/`, and learning notes in `docs/`.
 
 ## Build, Test, and Development Commands
 
-- `npm install`: install the locked Node.js dependencies. Use Node.js 20 or newer.
-- `npm run infra:up`: start all infrastructure, including RabbitMQ and its management UI.
+- `npm install`: install dependencies. Use Node.js 20 or newer.
+- `npm run infra:up`: start infrastructure, including RabbitMQ and its UI.
 - `npm start`: run checkout on port 3000 and inventory on port 3002.
 - `npm run start:payment`: consume queued orders and print payment results.
 - `npm run check`: perform JavaScript syntax checks.
@@ -15,7 +15,8 @@ Checkout, inventory, and payment services live in `app.js`, `inventory-service.j
 - `npm run test:scenarios`: verify slow, MySQL-error, and Redis-error troubleshooting paths.
 - `npm run test:sampling`: verify tail-sampling decisions and stable metric labels.
 - `npm run test:rabbitmq`: verify one isolated publish, consume, and ACK cycle.
-- `npm run test:message-context`: verify W3C context across AMQP headers.
+- `npm run test:message-context` / `npm run test:messaging-spans`: verify AMQP context and Span tree.
+- `npm run test:messaging-e2e`: verify the running asynchronous tree in Jaeger.
 - `npm run rabbitmq:producer` / `npm run rabbitmq:consumer`: exercise the queue manually.
 - `npm run traffic`: continuously generate demo traffic and print direct observability links.
 - `docker compose config --quiet`: validate Compose configuration.
@@ -27,7 +28,7 @@ Use CommonJS, `'use strict'`, two-space indentation, semicolons, and trailing co
 
 ## Testing Guidelines
 
-There is no unit-test framework or coverage threshold. Every change must pass `npm run check`, `docker compose config --quiet`, and, when running, `npm run test:smoke`. Exercise relevant manual scenarios too. Put future unit tests in `test/` as `*.test.js`.
+Node's test runner is used without a coverage threshold. Every change must pass `npm run check`, Compose validation, and relevant tests. Exercise relevant manual scenarios too. Name unit tests `test/*.test.js`.
 
 ## Commit & Pull Request Guidelines
 

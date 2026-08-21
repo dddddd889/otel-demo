@@ -42,7 +42,8 @@ processors:
         action: upsert
   tail_sampling:
     # 等待慢请求完成后再决策，否则可能在 1.2 秒延迟 Span 结束前提前采样。
-    decision_wait: 3s
+    # 多个 Node.js 进程各自批量导出；等待足够久，避免异步 Consumer Span 到达前提前决策。
+    decision_wait: 8s
     policies:
       - name: drop-health-traces
         type: drop

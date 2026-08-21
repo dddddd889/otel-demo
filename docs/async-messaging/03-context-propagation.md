@@ -18,6 +18,39 @@ checkout active context
 
 本步没有启用 amqplib 自动插桩，也没有创建 Producer/Consumer Span 或 Span Link。因此 payment 日志可以带原 Trace ID，但 Jaeger 中暂时没有 payment-service Span；这是 Commit 4 的内容。
 
+## 关键词解释
+
+### `traceparent`
+
+`traceparent` 是 W3C Trace Context 定义的标准传播字段，用于告诉消息消费者“这条消息属于哪条 Trace，上游 Span 是谁”。典型格式如下：
+
+```text
+00-e8029ba14cbee40e1f6c177771325845-6df49bd4c4b8dfa1-01
+│  │                                │                └─ Trace Flags：01 表示采样
+│  │                                └─ 上游 Span ID：16 个十六进制字符
+│  └─ Trace ID：32 个十六进制字符
+└─ 协议版本
+```
+
+Producer 将当前上下文注入消息 Header，Consumer 提取后创建的新 Span 才能继承相同 Trace ID。`traceparent` 只传播链路身份和采样决定，本身不会创建 Span，也不包含订单、用户等业务信息。
+
+### `baggage`
+
+`baggage` 是 W3C Baggage 定义的键值传播字段，用于让少量诊断上下文随请求或消息跨服务传递：
+
+```text
+baggage: demo.cart.id=cart-001,demo.tenant.id=demo-shop
+```
+
+Baggage 不会自动成为 Span 或 Log Attribute；Consumer 需要读取并按需复制。它不能代替正式业务参数，也不能作为可信的鉴权来源，因为调用方可以修改消息 Header。不要放密码、Token、个人敏感信息或大量字段。
+
+两者的区别可以记为：
+
+```text
+traceparent → 传播“链路是谁”
+baggage     → 传播“随链路携带的少量上下文”
+```
+
 ## 手工验证：看见上下文穿过 RabbitMQ
 
 ### 1. 只启动 HTTP 服务

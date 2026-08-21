@@ -24,6 +24,7 @@ Grafana ──> Prometheus + Loki + Jaeger
 - Node.js HTTP、Express、Redis、MySQL 自动插桩
 - `validate-cart`、`create-order` 等业务 Span 手动插桩
 - 跨 HTTP 和 RabbitMQ 的 W3C Trace Context 与 Baggage 传播
+- RabbitMQ Producer/Consumer Span 与异步 Span Link
 - `X-Trace-Id` 响应头，可立即定位单次请求
 - Trace、Metric、Log 通过 OTLP 统一发送到 Collector
 - Collector 内存保护、批处理、资源属性补充和智能尾采样
@@ -254,7 +255,7 @@ docker compose logs -f otel-collector
 
 ## 9. RabbitMQ 基础消息流
 
-当前已实现 checkout → RabbitMQ → payment-service：消息 Header 携带 `traceparent` 与 Baggage，支付日志可用原 Trace ID 在 Loki 中关联；消息 Span 将在下一学习 commit 加入。
+当前已实现 checkout → RabbitMQ → payment-service：消息 Header 传播上下文，Jaeger 展示 Producer、Consumer、`process-payment` Span，支付日志可用同一 Trace ID 在 Loki 中关联。
 
 ```bash
 # 终端 1：启动 checkout 与 inventory
@@ -267,7 +268,7 @@ npm run start:payment
 curl -s http://localhost:3000/checkout
 ```
 
-管理界面：<http://localhost:15672>。依次学习 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)、[Commit 2：checkout 到 payment-service](docs/async-messaging/02-payment-service.md) 和 [Commit 3：异步上下文传播](docs/async-messaging/03-context-propagation.md)。
+管理界面：<http://localhost:15672>。依次学习 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)、[Commit 2：checkout 到 payment-service](docs/async-messaging/02-payment-service.md)、[Commit 3：异步上下文传播](docs/async-messaging/03-context-propagation.md) 和 [Commit 4：消息 Span](docs/async-messaging/04-messaging-spans.md)。
 
 ## 10. 检查与清理
 

@@ -41,7 +41,7 @@ const telemetrySdk = new NodeSDK({
   ],
   logRecordProcessors: [new BatchLogRecordProcessor({ exporter: logExporter })],
   instrumentations: [getNodeAutoInstrumentations({
-    // 异步学习第 2 步只观察业务消息流，第 4 步再启用 Producer/Consumer Span。
+    // 禁用 amqplib 自动插桩，避免与第 4 步的手动 Producer/Consumer Span 重复。
     '@opentelemetry/instrumentation-amqplib': { enabled: false },
   })],
 });

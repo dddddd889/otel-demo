@@ -4,12 +4,13 @@ const { randomUUID } = require('crypto');
 const { context, propagation, trace } = require('@opentelemetry/api');
 const { connectRabbitMQ, ensureQueue, orderQueue } = require('./messaging/rabbitmq-client');
 const { extractMessageContext } = require('./messaging/message-context');
+const { runConsumerSpan, runPaymentSpan } = require('./messaging/messaging-spans');
 const { createTelemetryLogger } = require('./telemetry-logger');
 const { registerShutdownHook } = require('./shutdown-coordinator');
 
 const writeLog = createTelemetryLogger('payment-demo', '1.0.0');
 
-// 校验订单消息并生成最小支付结果；下一学习提交再加入 Trace Context。
+// 校验订单消息并生成最小支付结果；重试与死信队列留到第 5 步。
 async function processOrderMessage(orderMessage) {
   if (!orderMessage?.orderId) {
     throw new Error('订单消息缺少 orderId');
@@ -29,6 +30,18 @@ async function processOrderMessage(orderMessage) {
     currency: orderMessage.currency,
     paidAt: new Date().toISOString(),
   };
+}
+
+// 将解析后的订单字段补充到 Consumer Span，避免坏 JSON 阻止 Span 创建。
+function createConsumerOrderAttributes(orderMessage) {
+  const attributes = {};
+  if (orderMessage?.messageId) {
+    attributes['messaging.message.id'] = orderMessage.messageId;
+  }
+  if (orderMessage?.orderId) {
+    attributes['demo.order.id'] = orderMessage.orderId;
+  }
+  return attributes;
 }
 
 // 启动 payment-service，成功支付后 ACK，非法消息则丢弃。
@@ -69,50 +82,53 @@ async function startPaymentService() {
       }
 
       const messageContext = extractMessageContext(message.properties.headers);
-      await context.with(messageContext, async () => {
-        let orderMessage;
-        let payment;
-        try {
-          orderMessage = JSON.parse(message.content.toString('utf8'));
-          const spanContext = trace.getSpanContext(context.active());
-          const baggage = propagation.getBaggage(context.active());
-          const cartId = baggage?.getEntry('demo.cart.id')?.value;
-          const tenantId = baggage?.getEntry('demo.tenant.id')?.value;
-          console.log(`payment-service 恢复消息上下文：trace_id=${spanContext?.traceId || '无'} cart_id=${cartId || '无'} tenant_id=${tenantId || '无'}`);
-          console.log(`payment-service 开始处理订单：${orderMessage.orderId || '未知订单'}`);
-          payment = await processOrderMessage(orderMessage);
-          console.log('payment-service 支付完成：');
-          console.log(JSON.stringify(payment, null, 2));
-          const logAttributes = {
-            'demo.order.id': payment.orderId,
-            'demo.payment.id': payment.paymentId,
-          };
-          if (cartId) {
-            logAttributes['demo.cart.id'] = cartId;
-          }
-          if (tenantId) {
-            logAttributes['demo.tenant.id'] = tenantId;
-          }
-          writeLog('INFO', '异步支付完成', logAttributes);
-        } catch (error) {
-          console.error('payment-service 拒绝订单消息：', error.message);
+      let ackAttempted = false;
+      try {
+        await runConsumerSpan(messageContext, {
+          messageId: message.properties.messageId,
+        }, async (consumerSpan) => {
+          const orderMessage = JSON.parse(message.content.toString('utf8'));
+          consumerSpan.setAttributes(createConsumerOrderAttributes(orderMessage));
+          const payment = await runPaymentSpan(messageContext, orderMessage, async () => {
+            const spanContext = trace.getSpanContext(context.active());
+            const baggage = propagation.getBaggage(context.active());
+            const cartId = baggage?.getEntry('demo.cart.id')?.value;
+            const tenantId = baggage?.getEntry('demo.tenant.id')?.value;
+            console.log(`payment-service 恢复消息上下文：trace_id=${spanContext?.traceId || '无'} cart_id=${cartId || '无'} tenant_id=${tenantId || '无'}`);
+            console.log(`payment-service 开始处理订单：${orderMessage.orderId || '未知订单'}`);
+            const paymentResult = await processOrderMessage(orderMessage);
+            console.log('payment-service 支付完成：');
+            console.log(JSON.stringify(paymentResult, null, 2));
+            const logAttributes = {
+              'demo.order.id': paymentResult.orderId,
+              'demo.payment.id': paymentResult.paymentId,
+            };
+            if (cartId) {
+              logAttributes['demo.cart.id'] = cartId;
+            }
+            if (tenantId) {
+              logAttributes['demo.tenant.id'] = tenantId;
+            }
+            writeLog('INFO', '异步支付完成', logAttributes);
+            return paymentResult;
+          });
+          ackAttempted = true;
+          channel.ack(message);
+          console.log(`payment-service 已 ACK：${payment.orderId}`);
+        });
+      } catch (error) {
+        console.error('payment-service 拒绝订单消息：', error.message);
+        if (!ackAttempted) {
           try {
             channel.nack(message, false, false);
           } catch (channelError) {
             console.error('payment-service NACK 失败：', channelError.message);
             await shutdown(1);
           }
-          return;
-        }
-
-        try {
-          channel.ack(message);
-          console.log(`payment-service 已 ACK：${payment.orderId}`);
-        } catch (channelError) {
-          console.error('payment-service ACK 失败：', channelError.message);
+        } else {
           await shutdown(1);
         }
-      });
+      }
     }, { noAck: false });
   } catch (error) {
     await shutdown(1);

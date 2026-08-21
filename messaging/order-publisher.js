@@ -2,6 +2,7 @@
 
 const { connectRabbitMQ, ensureQueue, orderQueue } = require('./rabbitmq-client');
 const { injectMessageContext } = require('./message-context');
+const { runProducerSpan } = require('./messaging-spans');
 
 let connection;
 let connectionPromise;
@@ -72,14 +73,17 @@ async function getConfirmChannel() {
 
 // 发布订单并等待 Broker Confirm，但不等待 payment-service 完成支付。
 async function publishOrder(orderMessage) {
-  const channel = await getConfirmChannel();
-  const headers = injectMessageContext();
-  channel.sendToQueue(orderQueue, Buffer.from(JSON.stringify(orderMessage)), {
-    persistent: true,
-    contentType: 'application/json',
-    headers,
+  return runProducerSpan(orderMessage, async () => {
+    const channel = await getConfirmChannel();
+    const headers = injectMessageContext();
+    channel.sendToQueue(orderQueue, Buffer.from(JSON.stringify(orderMessage)), {
+      persistent: true,
+      contentType: 'application/json',
+      headers,
+      messageId: orderMessage.messageId,
+    });
+    await channel.waitForConfirms();
   });
-  await channel.waitForConfirms();
 }
 
 // 应用退出时关闭共享 Channel 和 Connection。
