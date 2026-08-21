@@ -1,4 +1,32 @@
 services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root-demo
+      MYSQL_DATABASE: otel_demo
+      MYSQL_USER: otel
+      MYSQL_PASSWORD: otel-demo
+    volumes:
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot-demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   jaeger:
     image: jaegertracing/jaeger:2.11.0
     environment:
@@ -21,12 +49,17 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
-    command: ["--config.file=/etc/prometheus/prometheus.yaml"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
+      - "--enable-feature=exemplar-storage"
     volumes:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ./prometheus-alerts.yaml:/etc/prometheus/alerts.yaml:ro
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - otel-collector
 
@@ -58,6 +91,7 @@ services:
       - jaeger
 
 volumes:
+  mysql-data:
   prometheus-data:
   loki-data:
   grafana-data:

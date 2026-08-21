@@ -12,6 +12,9 @@ datasources:
     jsonData:
       httpMethod: POST
       timeInterval: 2s
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: jaeger
 
   - name: Loki
     uid: loki

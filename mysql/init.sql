@@ -1,0 +1,11 @@
+CREATE DATABASE IF NOT EXISTS otel_demo;
+USE otel_demo;
+
+CREATE TABLE IF NOT EXISTS inventory (
+  sku VARCHAR(64) PRIMARY KEY,
+  stock INT NOT NULL
+);
+
+INSERT INTO inventory (sku, stock)
+VALUES ('SKU-001', 42)
+ON DUPLICATE KEY UPDATE stock = VALUES(stock);

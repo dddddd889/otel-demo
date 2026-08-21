@@ -2,14 +2,16 @@
 
 ## Project Structure & Module Organization
 
-This is a compact Node.js observability demo. `app.js` contains the Express service and telemetry. `instrumentation.js` initializes OpenTelemetry before the application loads. Infrastructure is defined in `docker-compose.yaml`; component configuration lives in `otel-collector-config.yaml`, `prometheus.yaml`, and `loki-config.yaml`. Grafana provisioning and dashboards are under `grafana/provisioning/` and `grafana/dashboards/`.
+This Node.js observability demo contains checkout and inventory services in `app.js` and `inventory-service.js`; `start-services.js` runs both. `instrumentation.js` initializes OpenTelemetry before application modules load, while `telemetry-logger.js` centralizes correlated logs. Infrastructure lives in `docker-compose.yaml`, with Collector, Prometheus, Loki, alerting, and Grafana configuration in top-level YAML files and `grafana/`. MySQL seed data is in `mysql/`, and end-to-end checks are in `scripts/`.
 
 ## Build, Test, and Development Commands
 
 - `npm install`: install the locked Node.js dependencies. Use Node.js 20 or newer.
 - `npm run infra:up`: start Jaeger, the Collector, Prometheus, Loki, and Grafana.
-- `npm start`: run the instrumented service on `http://localhost:3000`.
+- `npm start`: run checkout on port 3000 and inventory on port 3002.
 - `npm run check`: perform JavaScript syntax checks.
+- `npm run test:smoke`: verify traces, logs, baggage, exemplars, alerts, and health filtering.
+- `npm run traffic`: continuously generate demo traffic and print direct observability links.
 - `docker compose config --quiet`: validate Compose configuration.
 - `npm run infra:status`: inspect local service health and state.
 - `npm run infra:down`: stop the stack while retaining named-volume data.
@@ -22,7 +24,7 @@ Use CommonJS modules, `'use strict'`, two-space indentation, semicolons, and tra
 
 ## Testing Guidelines
 
-There is currently no automated test framework or coverage threshold. Every change must pass the syntax and Compose checks above. For behavior changes, manually verify successful and failed checkout responses, then confirm traces in Jaeger, metrics in Prometheus, and correlated logs in Grafana. If tests are introduced, place them in `test/` and name them `*.test.js`.
+There is no unit-test framework or coverage threshold. Every change must pass `npm run check`, `docker compose config --quiet`, and—when the stack is running—`npm run test:smoke`. For behavior changes, also exercise `curl 'http://localhost:3000/checkout?fail=true'`. Put future unit tests in `test/` and name them `*.test.js`.
 
 ## Commit & Pull Request Guidelines
 

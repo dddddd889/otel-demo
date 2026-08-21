@@ -2,7 +2,14 @@ global:
   scrape_interval: 2s
   evaluation_interval: 2s
 
+rule_files:
+  - /etc/prometheus/alerts.yaml
+
 scrape_configs:
   - job_name: otel-collector
     static_configs:
       - targets: [otel-collector:8889]
+
+  - job_name: checkout-exemplars
+    static_configs:
+      - targets: [host.docker.internal:3000]

@@ -7,7 +7,67 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  batch: {}
+  transform/add-local-time:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # Trace 使用 Span 开始时间生成东八区展示字段
+          - set(
+              attributes["timestamp_zh_cn"],
+              FormatTime(
+                start_time + Duration("8h"),
+                "%Y年%m月%d日 %H:%M:%S +08:00"
+              )
+            )
+    metric_statements:
+      - context: datapoint
+        statements:
+          # 仅供本地演示；该动态属性导出到 Prometheus 后会成为高基数标签
+          - set(
+              attributes["timestamp_zh_cn"],
+              FormatTime(
+                time + Duration("8h"),
+                "%Y年%m月%d日 %H:%M:%S +08:00"
+              )
+            )
+    log_statements:
+      - context: log
+        statements:
+          # 保留原始时间，新增东八区中文展示字段
+          - set(
+              attributes["timestamp_zh_cn"],
+              FormatTime(
+                time + Duration("8h"),
+                "%Y年%m月%d日 %H:%M:%S +08:00"
+              )
+            )
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  resource:
+    attributes:
+      - key: deployment.environment.name
+        value: local-demo
+        action: upsert
+  tail_sampling:
+    decision_wait: 1s
+    policies:
+      - name: drop-health-traces
+        type: drop
+        drop:
+          drop_sub_policy:
+            - name: health-route
+              type: string_attribute
+              string_attribute:
+                key: http.route
+                values: [/health]
+      - name: keep-other-traces
+        type: always_sample
+  batch:
+    timeout: 2s
+    send_batch_size: 512
 
 exporters:
   debug:
@@ -19,6 +79,7 @@ exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
     namespace: otel_demo
+    enable_open_metrics: true
   otlphttp/loki:
     endpoint: http://loki:3100/otlp
 
@@ -26,13 +87,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, tail_sampling, resource, transform/add-local-time, batch]
       exporters: [debug, otlp/jaeger]
     metrics:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, resource, transform/add-local-time, batch]
       exporters: [debug, prometheus]
     logs:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, resource, transform/add-local-time, batch]
       exporters: [debug, otlphttp/loki]

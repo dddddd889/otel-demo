@@ -1,25 +1,33 @@
 # OpenTelemetry Node.js 全栈 Demo
 
-这个 Demo 同时演示 OpenTelemetry 的 Trace、Metric、Log 三类数据，以及四个可观测性后端：
+这是一个 Node.js + OpenTelemetry 可观测性示例，通过 Jaeger、Prometheus、Loki 和 Grafana 统一体验分布式链路、指标、日志及三者关联。
 
 ```text
-Node.js / Express
-  ├─ Trace  ─┐
-  ├─ Metric ─┼─ OTLP/HTTP ─> OpenTelemetry Collector
-  └─ Log    ─┘                    ├─ Trace  ─> Jaeger
-                                 ├─ Metric ─> Prometheus
-                                 └─ Log    ─> Loki
+客户端 → checkout-service:3000 → inventory-service:3002
+                                      ├─ Redis
+                                      └─ MySQL
+
+两个应用进程 ── OTLP/HTTP ──> OpenTelemetry Collector
+                                ├─ Trace  ─> Jaeger
+                                ├─ Metric ─> Prometheus
+                                └─ Log    ─> Loki
 
 Grafana ──> Prometheus + Loki + Jaeger
 ```
 
-| 组件 | 作用 | 地址 |
-|---|---|---|
-| Node.js Demo | 产生 Trace、Metric、Log | <http://localhost:3000> |
-| Jaeger | 链路存储和查询 | <http://localhost:16686> |
-| Prometheus | 指标抓取、存储和 PromQL 查询 | <http://localhost:9090> |
-| Loki | 日志存储和 LogQL 查询 | <http://localhost:3100> |
-| Grafana | 指标、日志、链路统一可视化 | <http://localhost:3001> |
+## 功能清单
+
+- Node.js HTTP、Express、Redis、MySQL 自动插桩
+- `validate-cart`、`create-order` 等业务 Span 手动插桩
+- 跨进程 W3C Trace Context 与 Baggage 传播
+- `X-Trace-Id` 响应头，可立即定位单次请求
+- Trace、Metric、Log 通过 OTLP 统一发送到 Collector
+- Collector 内存保护、批处理、资源属性补充和 `/health` Trace 过滤
+- Loki 日志到 Jaeger Trace 跳转
+- Prometheus Exemplar 到 Jaeger Trace 跳转
+- SDK 可配置头部采样
+- Prometheus 规则告警和 Grafana 托管告警
+- 可在 Grafana UI 中修改并保存预置 Dashboard
 
 ## 1. 启动
 
@@ -31,130 +39,176 @@ npm run infra:up
 npm start
 ```
 
-Grafana 已开启匿名只读访问。需要管理权限时使用：
+首次启动需要等待 MySQL 健康：
+
+```bash
+npm run infra:status
+curl http://localhost:3002/health
+curl http://localhost:3000/health
+```
+
+| 组件 | 地址 | 用途 |
+|---|---|---|
+| Checkout | <http://localhost:3000> | 对外结账服务 |
+| Inventory | <http://localhost:3002> | 库存、Redis、MySQL 调用 |
+| Jaeger | <http://localhost:16686> | Trace 查询 |
+| Prometheus | <http://localhost:9090> | Metric 和规则告警 |
+| Loki API | <http://localhost:3100> | Log 存储，无独立 UI |
+| Grafana | <http://localhost:3001> | 统一查询和 Dashboard |
+
+Grafana 管理员账号为 `admin` / `admin`；匿名访问只有 Viewer 权限。
+
+## 2. 产生数据并获取 Trace ID
+
+成功请求：
+
+```bash
+curl -i http://localhost:3000/checkout
+```
+
+响应头会立即返回：
 
 ```text
-用户名：admin
-密码：admin
+X-Trace-Id: 0123456789abcdef0123456789abcdef
 ```
 
-## 2. 产生遥测数据
+响应 JSON 的 `observability` 字段还会直接提供 Jaeger Trace、Grafana 日志、Prometheus 查询和 Grafana Dashboard 链接，复制到浏览器即可打开。
 
-另开一个终端，分别触发成功和失败请求：
+失败请求：
 
 ```bash
-curl http://localhost:3000/checkout
-curl 'http://localhost:3000/checkout?fail=true'
+curl -i 'http://localhost:3000/checkout?fail=true'
 ```
 
-多调用几次更容易观察速率曲线：
+持续产生约 20% 失败流量，并为每条请求打印 Jaeger、Grafana 和 Prometheus 直达链接：
 
 ```bash
-for i in {1..10}; do curl -s http://localhost:3000/checkout; echo; done
+npm run traffic
 ```
 
-## 3. 查看 Trace：Jaeger
+按 `Ctrl+C` 停止造数。不要在 `curl` 后添加 `>/dev/null`，它会丢弃包含查询链接的响应。
 
-1. 打开 <http://localhost:16686>。
-2. 在 **Service** 中选择 `checkout-service`。
-3. 点击 **Find Traces**。
-4. 打开任意链路，可以看到自动插桩和手动业务 Span：
-   - `GET /checkout`
-   - `validate-cart`
-   - `query-inventory`
-   - `create-order`
+## 3. Trace 与跨服务传播
 
-访问 `/checkout?fail=true` 后，可以看到 HTTP 500 和异常事件。
+打开 Jaeger，选择 `checkout-service` 后点击 **Find Traces**。成功链路包含：
 
-## 4. 查看 Metric：Prometheus
+```text
+GET /checkout                         checkout-service
+├─ validate-cart                      手动业务 Span
+├─ GET inventory-service:3002         HTTP 客户端自动 Span
+│  └─ GET /inventory/:sku             inventory-service
+│     ├─ redis-GET / redis-SETEX       Redis 自动 Span
+│     └─ SELECT                        MySQL 自动 Span
+└─ create-order                       手动业务 Span
+```
 
-打开 <http://localhost:9090>，执行以下 PromQL：
+两个服务共享同一个 Trace ID。`demo.cart.id` 和 `demo.tenant.id` 通过 W3C Baggage 传播到库存服务，并出现在库存日志中。为完整展示两种客户端自动插桩，演示接口每次都会访问 Redis 和 MySQL；Redis 命中状态仅作为遥测属性，不用于跳过数据库查询。Collector 会整条丢弃 `/health` Trace，避免健康检查污染业务链路。
+
+## 4. Metric、Exemplar 与告警
+
+Prometheus 常用查询：
 
 ```promql
-# 请求总数
 sum(otel_demo_checkout_requests_total)
+```
 
-# 按状态码统计请求
+```promql
 sum by (http_response_status_code) (otel_demo_checkout_requests_total)
+```
 
-# 结账失败总数
-sum(otel_demo_checkout_failures_total)
-
-# P95 请求耗时
+```promql
 histogram_quantile(
   0.95,
-  sum by (le) (rate(otel_demo_checkout_request_duration_milliseconds_bucket[5m]))
-)
+  sum by (le) (
+    rate(checkout_request_duration_seconds_bucket[5m])
+  )
+) * 1000
 ```
 
-## 5. 查看 Log：Loki / Grafana
+应用同时通过 OTLP 记录标准指标，并在 `/metrics` 暴露一个 OpenMetrics Histogram 用于演示 Exemplar。Prometheus 直接抓取该端点；Grafana 的“请求耗时 P95”面板已启用 Exemplar，将鼠标移到数据点并点击 Exemplar 可跳转到 Jaeger。
 
-推荐从 Grafana 查看：
+Prometheus 告警规则位于 `prometheus-alerts.yaml`：
 
-1. 打开 <http://localhost:3001>。
-2. 进入预置的 **OpenTelemetry Demo / OpenTelemetry Node.js 全栈 Demo** Dashboard。
-3. 底部日志面板使用以下 LogQL：
+- `CheckoutFailuresDetected`：最近一分钟出现失败。
+- `CheckoutP95LatencyHigh`：P95 延迟持续一分钟超过 500ms。
+
+在 <http://localhost:9090/alerts> 查看 Prometheus 告警。Grafana 还预置了 `Checkout failures detected` 托管告警，可在 **Alerting → Alert rules** 查看。
+
+## 5. Log 与 Trace 关联
+
+在 Grafana **Explore** 选择 Loki：
 
 ```logql
-{service_name="checkout-service"}
+{service_name=~"checkout-service|inventory-service"}
 ```
 
-每条业务日志都包含 `trace_id`。Grafana 的 Loki 数据源已配置 Derived Field，点击日志中的 TraceID 可以跳转到对应 Jaeger 链路。
-
-只查看错误日志：
+只看错误：
 
 ```logql
 {service_name="checkout-service"} | detected_level="error"
 ```
 
-## 6. Grafana Dashboard
+按 Trace ID 查询：
 
-Dashboard 已自动预置，无需手动添加数据源，包括：
-
-- 请求总数
-- 结账失败总数
-- 按 HTTP 状态码划分的请求速率
-- 请求耗时 P95
-- 带 TraceID 的应用日志
-- 跳转 Jaeger 的快捷入口
-
-Grafana 已自动连接：
-
-- Prometheus：`http://prometheus:9090`
-- Loki：`http://loki:3100`
-- Jaeger：`http://jaeger:16686`
-
-## 7. 常用命令
-
-```bash
-# 查看所有后端状态
-npm run infra:status
-
-# 查看 Collector 收到的三类数据
-docker compose logs -f otel-collector
-
-# 停止后端，但保留 Prometheus、Loki、Grafana 数据卷
-npm run infra:down
-
-# 连数据卷一起删除，完全清空演示数据
-docker compose down -v
-
-# JavaScript 和 Compose 静态检查
-npm run check
-docker compose config --quiet
+```logql
+{service_name=~"checkout-service|inventory-service"}
+  |= "0123456789abcdef0123456789abcdef"
 ```
 
-## 8. 文件说明
+展开日志后点击 `TraceID` 可跳转到 Jaeger。不要使用 `{trace_id="..."}`，因为 Trace ID 是结构化元数据和日志正文，不是 Loki 流标签。
 
-| 文件 | 作用 |
-|---|---|
-| `app.js` | Express 接口、业务 Span、自定义指标和关联日志 |
-| `instrumentation.js` | OpenTelemetry SDK、自动插桩和三种 OTLP exporter |
-| `otel-collector-config.yaml` | Trace、Metric、Log 三条 Collector pipeline |
-| `prometheus.yaml` | Prometheus 抓取 Collector 的配置 |
-| `loki-config.yaml` | Loki 单机存储配置 |
-| `grafana/provisioning/` | Grafana 数据源和 Dashboard 自动预置 |
-| `grafana/dashboards/` | 全栈 Demo Dashboard |
-| `docker-compose.yaml` | Jaeger、Collector、Prometheus、Loki、Grafana |
+## 6. 采样
 
-这个配置用于本地学习，不是生产配置。生产环境还需要认证、TLS、持久化备份、采样、限流和高可用等设计。
+默认保留全部 Trace。以 50% 概率采样根 Trace：
+
+```bash
+OTEL_TRACES_SAMPLER=parentbased_traceidratio \
+OTEL_TRACES_SAMPLER_ARG=0.5 \
+npm start
+```
+
+`parentbased_traceidratio` 会让库存服务继承结账服务的采样决定，避免出现半条分布式链路。示例变量见 `.env.example`。
+
+## 7. Collector 处理与调试
+
+Collector 的处理流程：
+
+```text
+OTLP receiver
+  → memory_limiter
+  → tail_sampling（整条丢弃 /health Trace）
+  → resource（deployment.environment.name=local-demo）
+  → batch
+  → exporters
+```
+
+`transform/add-local-time` 会为 Log、Span 和 Metric datapoint 添加 `timestamp_zh_cn`。该字段用于本地演示；Metric 中的动态时间属性会成为高基数 Prometheus 标签，生产环境不应保留。
+
+查看 Collector 收到的数据和导出错误：
+
+```bash
+docker compose logs -f otel-collector
+```
+
+## 8. Grafana Dashboard
+
+进入 **Dashboards → OpenTelemetry Demo → OpenTelemetry Node.js 全栈 Demo**，可查看请求、失败、状态码速率、P95、Exemplar 和两服务关联日志。
+
+预置配置启用了 `allowUiUpdates`。使用 `admin` 登录后可直接编辑和保存，也可通过 **Save as** 创建实验副本。
+
+## 9. 检查与清理
+
+```bash
+npm run check
+docker compose config --quiet
+npm run infra:status
+npm run test:smoke
+
+# 停止后端并保留数据卷
+npm run infra:down
+
+# 连同 MySQL、Prometheus、Loki、Grafana 数据一起清空
+docker compose down -v
+```
+
+本项目用于本地学习。生产环境还需使用密钥管理、认证、TLS、持久化备份、正式采样策略、限流、高可用和告警通知渠道。
