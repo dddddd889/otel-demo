@@ -2,6 +2,8 @@
 
 这是一个 Node.js + OpenTelemetry 可观测性示例，通过 Jaeger、Prometheus、Loki 和 Grafana 统一体验分布式链路、指标、日志及三者关联。
 
+按 Git 提交拆分的改动、测试和学习文档见 [按 Commit 学习 OpenTelemetry Demo](docs/commit-history/README.md)。
+
 ```text
 客户端 → checkout-service:3000 → inventory-service:3002
                                       ├─ Redis
@@ -22,7 +24,7 @@ Grafana ──> Prometheus + Loki + Jaeger
 - 跨进程 W3C Trace Context 与 Baggage 传播
 - `X-Trace-Id` 响应头，可立即定位单次请求
 - Trace、Metric、Log 通过 OTLP 统一发送到 Collector
-- Collector 内存保护、批处理、资源属性补充和 `/health` Trace 过滤
+- Collector 内存保护、批处理、资源属性补充和智能尾采样
 - Loki 日志到 Jaeger Trace 跳转
 - Prometheus Exemplar 到 Jaeger Trace 跳转
 - SDK 可配置头部采样
@@ -185,7 +187,22 @@ Prometheus 告警规则位于 `prometheus-alerts.yaml`：
 
 ## 6. 采样
 
-默认保留全部 Trace。以 50% 概率采样根 Trace：
+应用 SDK 默认采集全部 Trace，Collector 查看完整链路后执行尾采样：
+
+| Trace 类型 | Collector 决策 |
+| --- | --- |
+| `/health` | 0%，整条丢弃 |
+| 状态为 `ERROR` | 100% 保留 |
+| 总耗时超过 1000ms | 100% 保留 |
+| 其他正常请求 | 约 10% 保留 |
+
+运行可重复实验：
+
+```bash
+npm run test:sampling
+```
+
+如果在 SDK 侧改为 50% 头部采样：
 
 ```bash
 OTEL_TRACES_SAMPLER=parentbased_traceidratio \
@@ -193,7 +210,17 @@ OTEL_TRACES_SAMPLER_ARG=0.5 \
 npm start
 ```
 
-`parentbased_traceidratio` 会让库存服务继承结账服务的采样决定，避免出现半条分布式链路。示例变量见 `.env.example`。
+`parentbased_traceidratio` 会让库存服务继承结账服务的采样决定，但被 SDK 丢弃的 Trace 永远到不了 Collector，因此错误/慢请求也无法被尾采样“救回”。研究尾采样时应保持 SDK 默认 `always_on`。示例变量见 `.env.example`。
+
+### Metric 高基数对比
+
+Metric 数据点原生带时间戳，不再添加动态 `timestamp_zh_cn` 标签。动态时间标签会让每次采集形成新序列，破坏 `rate()`、增加内存和存储成本。Collector 原始 Prometheus 端点可直接验证：
+
+```bash
+curl -s http://localhost:8889/metrics | grep timestamp_zh_cn
+```
+
+正确结果为空。Prometheus 中历史高基数序列可能要等待陈旧标记或数据保留期结束后才消失。
 
 ## 7. Collector 处理与调试
 
@@ -202,13 +229,13 @@ Collector 的处理流程：
 ```text
 OTLP receiver
   → memory_limiter
-  → tail_sampling（整条丢弃 /health Trace）
+  → tail_sampling（丢弃健康检查；全留错误/慢请求；正常采样 10%）
   → resource（deployment.environment.name=local-demo）
   → batch
   → exporters
 ```
 
-`transform/add-local-time` 会为 Log、Span 和 Metric datapoint 添加 `timestamp_zh_cn`。该字段用于本地演示；Metric 中的动态时间属性会成为高基数 Prometheus 标签，生产环境不应保留。
+`transform/add-local-time` 只为 Log 和 Span 添加 `timestamp_zh_cn`；Metric 保留原生时间戳和稳定标签。
 
 查看 Collector 收到的数据和导出错误：
 

@@ -87,8 +87,8 @@ async function verifyTrace(scenario, traceId) {
   });
 }
 
-// 验证 Prometheus 场景标签与 Exemplar 能关联回当前 Trace。
-async function verifyMetrics(scenario, traceId) {
+// 验证 Prometheus 场景标签与 Exemplar 能关联到一条真实 Trace。
+async function verifyMetrics(scenario) {
   return poll(async () => {
     const metricExpression = `checkout_request_duration_seconds_count{demo_scenario="${scenario.name}"}`;
     const metricUrl = new URL('http://localhost:9090/api/v1/query');
@@ -106,10 +106,21 @@ async function verifyMetrics(scenario, traceId) {
     exemplarUrl.searchParams.set('end', String(Math.floor(Date.now() / 1000)));
     const exemplarResponse = await fetch(exemplarUrl);
     const exemplarResult = await exemplarResponse.json();
-    const exemplarTraceIds = (exemplarResult.data || []).flatMap((series) =>
-      (series.exemplars || []).map((exemplar) => exemplar.labels?.trace_id));
+    const exemplarTraceIds = [...new Set((exemplarResult.data || []).flatMap((series) =>
+      (series.exemplars || []).map((exemplar) => exemplar.labels?.trace_id))
+      .filter((traceId) => /^[a-f0-9]{32}$/.test(traceId || '')))];
+    if (!exemplarTraceIds.length) {
+      return undefined;
+    }
+    const traceResults = await Promise.all(exemplarTraceIds.map(async (exemplarTraceId) => {
+      const traceResponse = await fetch(`http://localhost:16686/api/traces/${exemplarTraceId}`);
+      return traceResponse.json();
+    }));
+    const linkedTraceExists = traceResults.some((traceResult) =>
+      (traceResult.data?.[0]?.spans || []).some((span) =>
+        span.tags?.some((tag) => tag.key === 'demo.scenario' && tag.value === scenario.name)));
 
-    return exemplarTraceIds.includes(traceId) ? metricResult.data.result : undefined;
+    return linkedTraceExists ? metricResult.data.result : undefined;
   });
 }
 
@@ -137,7 +148,7 @@ async function main() {
     await Promise.all([
       verifyTrace(scenario, traceId),
       verifyLogs(scenario, traceId),
-      verifyMetrics(scenario, traceId),
+      verifyMetrics(scenario),
     ]);
     console.log(`${scenario.name} 场景通过，Trace ID：${traceId}`);
   }

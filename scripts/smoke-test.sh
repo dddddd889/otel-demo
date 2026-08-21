@@ -22,11 +22,11 @@ wait_for_url 'http://localhost:3000/health'
 wait_for_url 'http://localhost:3002/health'
 wait_for_url 'http://localhost:3100/ready'
 
-# 触发一条完整链路，并从响应头提取 Trace ID。
+# 触发一条必定被尾采样保留的慢链路，并从响应头提取 Trace ID。
 response_headers="$(mktemp)"
 trap 'rm -f "$response_headers"' EXIT
 curl --silent --show-error --dump-header "$response_headers" \
-  http://localhost:3000/checkout >/dev/null
+  'http://localhost:3000/checkout?slow=true' >/dev/null
 trace_id="$(awk 'BEGIN { IGNORECASE=1 } /^X-Trace-Id:/ { gsub("\\r", "", $2); print $2 }' "$response_headers")"
 export TRACE_ID="$trace_id"
 

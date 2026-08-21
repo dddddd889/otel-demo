@@ -12,6 +12,7 @@ This Node.js observability demo contains checkout and inventory services in `app
 - `npm run check`: perform JavaScript syntax checks.
 - `npm run test:smoke`: verify traces, logs, baggage, exemplars, alerts, and health filtering.
 - `npm run test:scenarios`: verify slow, MySQL-error, and Redis-error troubleshooting paths.
+- `npm run test:sampling`: verify tail-sampling decisions and stable metric labels.
 - `npm run traffic`: continuously generate demo traffic and print direct observability links.
 - `docker compose config --quiet`: validate Compose configuration.
 - `npm run infra:down`: stop the stack while retaining named-volume data.

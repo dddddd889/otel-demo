@@ -20,17 +20,6 @@ processors:
                 "%Y年%m月%d日 %H:%M:%S +08:00"
               )
             )
-    metric_statements:
-      - context: datapoint
-        statements:
-          # 仅供本地演示；该动态属性导出到 Prometheus 后会成为高基数标签
-          - set(
-              attributes["timestamp_zh_cn"],
-              FormatTime(
-                time + Duration("8h"),
-                "%Y年%m月%d日 %H:%M:%S +08:00"
-              )
-            )
     log_statements:
       - context: log
         statements:
@@ -52,7 +41,8 @@ processors:
         value: local-demo
         action: upsert
   tail_sampling:
-    decision_wait: 1s
+    # 等待慢请求完成后再决策，否则可能在 1.2 秒延迟 Span 结束前提前采样。
+    decision_wait: 3s
     policies:
       - name: drop-health-traces
         type: drop
@@ -63,8 +53,18 @@ processors:
               string_attribute:
                 key: http.route
                 values: [/health]
-      - name: keep-other-traces
-        type: always_sample
+      - name: keep-error-traces
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: keep-slow-traces
+        type: latency
+        latency:
+          threshold_ms: 1000
+      - name: sample-normal-traces
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
   batch:
     timeout: 2s
     send_batch_size: 512
@@ -91,7 +91,8 @@ service:
       exporters: [debug, otlp/jaeger]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, resource, transform/add-local-time, batch]
+      # Metric 原生带时间戳；不增加动态时间属性，避免生成高基数标签。
+      processors: [memory_limiter, resource, batch]
       exporters: [debug, prometheus]
     logs:
       receivers: [otlp]
