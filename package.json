@@ -1,0 +1,32 @@
+{
+  "name": "opentelemetry-nodejs-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js + OpenTelemetry + Jaeger + Prometheus + Loki + Grafana 全栈演示",
+  "main": "app.js",
+  "scripts": {
+    "start": "node --require ./instrumentation.js app.js",
+    "check": "node --check app.js && node --check instrumentation.js",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:status": "docker compose ps"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api-logs": "^0.221.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.221.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.221.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-logs": "^0.221.0",
+    "@opentelemetry/sdk-metrics": "^2.10.0",
+    "@opentelemetry/sdk-node": "^0.221.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
+    "express": "^5.2.1"
+  },
+  "packageManager": "pnpm@11.7.0+sha512.19cc852c120c7125760f2443ee6be0ca5b40f9f50598de1a09a1f177503e010e57c23c77646e01e761de59bf874fb22a3398c33ab9691fc13eb946b6f0f4d620"
+}

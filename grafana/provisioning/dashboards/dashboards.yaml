@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: OpenTelemetry Demo
+    orgId: 1
+    folder: OpenTelemetry Demo
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
