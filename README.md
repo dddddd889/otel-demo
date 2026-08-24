@@ -25,6 +25,7 @@ Grafana ──> Prometheus + Loki + Jaeger
 - `validate-cart`、`create-order` 等业务 Span 手动插桩
 - 跨 HTTP 和 RabbitMQ 的 W3C Trace Context 与 Baggage 传播
 - RabbitMQ Producer/Consumer Span 与异步 Span Link
+- 支付失败延迟重试、死信队列及重试链路关联
 - `X-Trace-Id` 响应头，可立即定位单次请求
 - Trace、Metric、Log 通过 OTLP 统一发送到 Collector
 - Collector 内存保护、批处理、资源属性补充和智能尾采样
@@ -103,6 +104,8 @@ npm run traffic
 | MySQL 错误 | `curl 'http://localhost:3000/checkout?dbError=true'` | HTTP 500，SQL Span 标记错误 |
 | Redis 错误 | `curl 'http://localhost:3000/checkout?redisError=true'` | HTTP 500，Redis Span 标记错误 |
 | 业务错误 | `curl 'http://localhost:3000/checkout?fail=true'` | HTTP 500，根 Span 标记错误 |
+| 支付临时故障 | `curl 'http://localhost:3000/checkout?paymentRetry=true'` | 前两次失败，第三次异步支付成功 |
+| 支付永久故障 | `curl 'http://localhost:3000/checkout?paymentDlq=true'` | 重试两次后进入 DLQ |
 
 ## 3. Trace 与跨服务传播
 
@@ -255,7 +258,7 @@ docker compose logs -f otel-collector
 
 ## 9. RabbitMQ 基础消息流
 
-当前已实现 checkout → RabbitMQ → payment-service：消息 Header 传播上下文，Jaeger 展示 Producer、Consumer、`process-payment` Span，支付日志可用同一 Trace ID 在 Loki 中关联。
+当前已实现 checkout → RabbitMQ → payment-service：消息 Header 传播上下文，Jaeger 展示 Producer、Consumer、`process-payment` Span；支付失败可延迟重试两次，最终进入 DLQ。
 
 ```bash
 # 终端 1：启动 checkout 与 inventory
@@ -268,7 +271,7 @@ npm run start:payment
 curl -s http://localhost:3000/checkout
 ```
 
-管理界面：<http://localhost:15672>。依次学习 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)、[Commit 2：checkout 到 payment-service](docs/async-messaging/02-payment-service.md)、[Commit 3：异步上下文传播](docs/async-messaging/03-context-propagation.md) 和 [Commit 4：消息 Span](docs/async-messaging/04-messaging-spans.md)。
+管理界面：<http://localhost:15672>。依次学习 [Commit 1：RabbitMQ 基础消息流](docs/async-messaging/01-rabbitmq-basic.md)、[Commit 2：checkout 到 payment-service](docs/async-messaging/02-payment-service.md)、[Commit 3：异步上下文传播](docs/async-messaging/03-context-propagation.md)、[Commit 4：消息 Span](docs/async-messaging/04-messaging-spans.md) 和 [Commit 5：重试与 DLQ](docs/async-messaging/05-retry-and-dlq.md)。
 
 ## 10. 检查与清理
 

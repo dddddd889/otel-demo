@@ -23,6 +23,9 @@ function createMessagingAttributes(orderMessage, operationType) {
   if (orderMessage.orderId) {
     attributes['demo.order.id'] = orderMessage.orderId;
   }
+  if (Number.isSafeInteger(orderMessage.retryCount)) {
+    attributes['demo.payment.retry.count'] = orderMessage.retryCount;
+  }
   return attributes;
 }
 
@@ -31,6 +34,32 @@ async function runProducerSpan(orderMessage, publishCallback) {
   return tracer.startActiveSpan('otel.demo.orders send', {
     kind: SpanKind.PRODUCER,
     attributes: createMessagingAttributes(orderMessage, 'send'),
+  }, async (span) => {
+    try {
+      const result = await publishCallback();
+      span.setStatus({ code: SpanStatusCode.OK });
+      return result;
+    } catch (error) {
+      span.recordException(error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+// 为重试或死信发布创建独立 Producer Span，便于在 Jaeger 观察失败路由。
+async function runFailureRouteSpan(messageMetadata, route, publishCallback) {
+  const destinationName = route === 'retry' ? `${orderQueue}.retry` : `${orderQueue}.dlq`;
+  return tracer.startActiveSpan(`${destinationName} send`, {
+    kind: SpanKind.PRODUCER,
+    attributes: {
+      ...createMessagingAttributes(messageMetadata, 'send'),
+      'messaging.destination.name': destinationName,
+      'demo.payment.failure.route': route,
+      'demo.payment.retry.count': messageMetadata.retryCount,
+    },
   }, async (span) => {
     try {
       const result = await publishCallback();
@@ -78,6 +107,8 @@ async function runPaymentSpan(messageContext, orderMessage, processCallback) {
       'demo.order.id': orderMessage.orderId,
       'demo.order.amount': orderMessage.amount,
       'demo.order.currency': orderMessage.currency,
+      'demo.payment.retry.count': orderMessage.retryCount || 0,
+      'demo.scenario': orderMessage.scenario || 'normal',
     },
     links,
   }, async (paymentSpan) => {
@@ -98,6 +129,7 @@ async function runPaymentSpan(messageContext, orderMessage, processCallback) {
 module.exports = {
   createMessagingAttributes,
   runConsumerSpan,
+  runFailureRouteSpan,
   runPaymentSpan,
   runProducerSpan,
 };

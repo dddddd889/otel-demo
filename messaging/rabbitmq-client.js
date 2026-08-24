@@ -5,6 +5,8 @@ const amqp = require('amqplib');
 // RabbitMQ 基础配置；后续学习提交会在消息头中增加 Trace Context。
 const rabbitmqUrl = process.env.AMQP_URL || 'amqp://otel:otel-demo@localhost:5672';
 const orderQueue = process.env.RABBITMQ_ORDER_QUEUE || 'otel.demo.orders';
+const orderRetryQueue = `${orderQueue}.retry`;
+const orderDeadLetterQueue = `${orderQueue}.dlq`;
 
 // 建立 RabbitMQ TCP/AMQP 连接。
 function connectRabbitMQ(url = rabbitmqUrl) {
@@ -14,6 +16,20 @@ function connectRabbitMQ(url = rabbitmqUrl) {
 // 声明持久化队列，Producer 和 Consumer 使用相同配置。
 function ensureQueue(channel, queue = orderQueue) {
   return channel.assertQueue(queue, { durable: true });
+}
+
+// 声明支付重试与死信队列；重试消息到期后由 RabbitMQ 自动送回主队列。
+async function ensurePaymentQueues(channel, retryDelayMilliseconds) {
+  await ensureQueue(channel, orderQueue);
+  await channel.assertQueue(orderRetryQueue, {
+    durable: true,
+    arguments: {
+      'x-message-ttl': retryDelayMilliseconds,
+      'x-dead-letter-exchange': '',
+      'x-dead-letter-routing-key': orderQueue,
+    },
+  });
+  await ensureQueue(channel, orderDeadLetterQueue);
 }
 
 // 使用 Confirm Channel 发布持久化 JSON 消息，并等待 Broker 确认。
@@ -65,8 +81,11 @@ async function consumeOne(connection, queue = orderQueue, timeoutMilliseconds = 
 module.exports = {
   connectRabbitMQ,
   consumeOne,
+  ensurePaymentQueues,
   ensureQueue,
+  orderDeadLetterQueue,
   orderQueue,
+  orderRetryQueue,
   publishJson,
   rabbitmqUrl,
 };

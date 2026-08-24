@@ -16,7 +16,7 @@ Checkout, inventory, and payment live in `app.js`, `inventory-service.js`, and `
 - `npm run test:sampling`: verify tail-sampling decisions and stable metric labels.
 - `npm run test:rabbitmq`: verify one isolated publish, consume, and ACK cycle.
 - `npm run test:message-context` / `npm run test:messaging-spans`: verify AMQP context and Span tree.
-- `npm run test:messaging-e2e`: verify the running asynchronous tree in Jaeger.
+- `npm run test:messaging-e2e` / `npm run test:retry-dlq`: verify running message flows.
 - `npm run rabbitmq:producer` / `npm run rabbitmq:consumer`: exercise the queue manually.
 - `npm run traffic`: continuously generate demo traffic and print direct observability links.
 - `docker compose config --quiet`: validate Compose configuration.
@@ -28,7 +28,7 @@ Use CommonJS, `'use strict'`, two-space indentation, semicolons, and trailing co
 
 ## Testing Guidelines
 
-Node's test runner is used without a coverage threshold. Every change must pass `npm run check`, Compose validation, and relevant tests. Exercise relevant manual scenarios too. Name unit tests `test/*.test.js`.
+Node's test runner has no coverage threshold. Changes must pass `npm run check`, Compose validation, and relevant tests. Exercise manual scenarios too. Name unit tests `test/*.test.js`.
 
 ## Commit & Pull Request Guidelines
 

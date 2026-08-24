@@ -7,7 +7,11 @@ const { Histogram, Registry } = require('prom-client');
 const { context, metrics, propagation, trace, SpanStatusCode } = require('@opentelemetry/api');
 const { createTelemetryLogger } = require('./telemetry-logger');
 const { createOrderMessage } = require('./messaging/order-message');
-const { orderQueue } = require('./messaging/rabbitmq-client');
+const {
+  orderDeadLetterQueue,
+  orderQueue,
+  orderRetryQueue,
+} = require('./messaging/rabbitmq-client');
 const { closeOrderPublisher, publishOrder } = require('./messaging/order-publisher');
 const { registerShutdownHook } = require('./shutdown-coordinator');
 
@@ -56,6 +60,12 @@ function getScenario(query) {
   }
   if (query.fail === 'true') {
     return 'business-error';
+  }
+  if (query.paymentRetry === 'true') {
+    return 'payment-retry';
+  }
+  if (query.paymentDlq === 'true') {
+    return 'payment-dlq';
   }
   return 'normal';
 }
@@ -207,6 +217,8 @@ app.get('/', (request, response) => {
       '/checkout?dbError=true',
       '/checkout?redisError=true',
       '/checkout?fail=true',
+      '/checkout?paymentRetry=true',
+      '/checkout?paymentDlq=true',
       '/health',
     ],
     interfaces: {
@@ -288,6 +300,8 @@ app.get('/checkout', async (request, response) => {
         status: 'created',
         paymentStatus: 'queued',
         messageQueue: orderQueue,
+        retryQueue: orderRetryQueue,
+        deadLetterQueue: orderDeadLetterQueue,
         scenario,
         inventory,
         observability,

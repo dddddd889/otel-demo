@@ -28,3 +28,29 @@ test('payment-service 拒绝缺少订单号的消息', async () => {
     /orderId/,
   );
 });
+
+test('payment-retry 场景前两次失败，第三次支付成功', async () => {
+  const orderMessage = {
+    orderId: 'order-retry-001',
+    amount: 199,
+    currency: 'CNY',
+    scenario: 'payment-retry',
+  };
+
+  await assert.rejects(processOrderMessage(orderMessage, 0), /模拟支付网关临时故障/);
+  await assert.rejects(processOrderMessage(orderMessage, 1), /模拟支付网关临时故障/);
+  const result = await processOrderMessage(orderMessage, 2);
+  assert.equal(result.status, 'paid');
+});
+
+test('payment-dlq 场景每次都失败', async () => {
+  const orderMessage = {
+    orderId: 'order-dlq-001',
+    amount: 199,
+    currency: 'CNY',
+    scenario: 'payment-dlq',
+  };
+
+  await assert.rejects(processOrderMessage(orderMessage, 0), /模拟支付永久失败/);
+  await assert.rejects(processOrderMessage(orderMessage, 2), /模拟支付永久失败/);
+});
