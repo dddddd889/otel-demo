@@ -11,15 +11,16 @@ Checkout, inventory, and payment live in `app.js`, `inventory-service.js`, and `
 - `npm start`: run checkout on port 3000 and inventory on port 3002.
 - `npm run start:payment`: consume queued orders and print payment results.
 - `npm run check`: check JavaScript syntax.
-- `npm run test:smoke`: verify traces, logs, baggage, exemplars, alerts, and health filtering.
+- `npm run test:smoke`: verify core observability paths.
 - `npm run test:scenarios`: verify slow, MySQL-error, and Redis-error troubleshooting paths.
 - `npm run test:sampling`: verify tail-sampling decisions and stable metric labels.
 - `npm run test:rabbitmq`: verify one isolated publish, consume, and ACK cycle.
-- `npm run test:message-context` / `npm run test:messaging-spans`: verify AMQP context and Span tree.
+- `npm run test:message-context` / `npm run test:messaging-spans`: verify AMQP telemetry.
 - `npm run test:messaging-e2e` / `npm run test:retry-dlq`: verify running message flows.
 - `npm run test:auto-instrumentation`: compare baseline, manual patch, and official HTTP instrumentation.
+- `npm run test:context-lab`: compare global state, AsyncLocalStorage, and OTel Context.
 - `npm run rabbitmq:producer` / `npm run rabbitmq:consumer`: exercise the queue manually.
-- `npm run traffic`: continuously generate demo traffic and print direct observability links.
+- `npm run traffic`: generate traffic and print observability links.
 - `docker compose config --quiet`: validate Compose configuration.
 - `npm run infra:down`: stop the stack while retaining named-volume data.
 

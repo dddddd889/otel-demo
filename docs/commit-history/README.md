@@ -8,7 +8,8 @@
 | 2 | `477a32e` | 跨服务采集、存储、查询和关联 | [02-477a32e-observability.md](02-477a32e-observability.md) |
 | 3 | `8a0461b` | 可控故障与排障练习 | [03-8a0461b-troubleshooting.md](03-8a0461b-troubleshooting.md) |
 | 4 | `c581d37` | 智能尾采样与 Metric 高基数治理 | [04-working-tree-sampling.md](04-working-tree-sampling.md) |
-| 5 | 尚未提交 | Node.js 自动插桩原理实验 | [课程：自动插桩怎么工作](../../lessons/0001-how-node-auto-instrumentation-works.html) |
+| 5 | `317e43a` | Node.js 自动插桩原理实验 | [课程：自动插桩怎么工作](../../lessons/0001-how-node-auto-instrumentation-works.html) |
+| 6 | 尚未提交 | AsyncLocalStorage 与 OTel Context | [课程：Context 如何跟随异步调用链](../../lessons/0002-context-follows-async-work.html) |
 
 异步消息使用另一条递进学习线，见 [异步消息传播学习路线](../async-messaging/README.md)。RabbitMQ 基础流为 `8764dce`，payment 接入为 `c7d3ec7`，上下文传播为 `84b1fa3`，消息 Span 为 `8296ff9`，重试与 DLQ 为 `7aecc6d`。
 
@@ -18,4 +19,4 @@
 
 ## 异步能力边界
 
-异步支线已经覆盖 RabbitMQ 基础流、payment 接入、Trace Context、Baggage、Producer/Consumer Span、Span Link、有限重试和 DLQ。当前工作区回到 OpenTelemetry 原理主线，用隔离实验解释自动插桩。
+异步支线已经覆盖 RabbitMQ 基础流、payment 接入、Trace Context、Baggage、Producer/Consumer Span、Span Link、有限重试和 DLQ。当前工作区回到 OpenTelemetry 原理主线，用隔离实验解释自动插桩和异步 Context。

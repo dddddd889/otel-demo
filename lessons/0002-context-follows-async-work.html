@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Context 如何跟随异步调用链</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow">OpenTelemetry 原理课 · 02</p>
+  <h1>Trace 不串线，靠的不是全局变量，而是异步上下文。</h1>
+  <p class="lede">用两个并发任务依次验证全局变量、Node.js AsyncLocalStorage 和 OTel Context。约 10 分钟，不需要 Docker，也不占用业务端口。</p>
+
+  <section>
+    <h2>先建立正确心智模型</h2>
+    <div class="flow">
+      <div><strong>普通变量</strong><br>整个进程共享最后一次写入</div>
+      <div><strong>AsyncLocalStorage</strong><br>每条异步调用链拥有独立 Store</div>
+      <div><strong>OTel Context</strong><br>在 Store 中携带 Active Span 等值</div>
+    </div>
+    <p class="card">Context 不是跨进程 Header。Context 解决<strong>当前进程、当前异步调用链</strong>里的状态传递；Propagation 才负责把 Context 注入 HTTP 或 MQ Header，交给另一个进程。</p>
+  </section>
+
+  <section>
+    <h2>1. 亲手复现串线</h2>
+    <pre><code>npm run lab:context:global</code></pre>
+    <pre><code>[TASK] mode=global expected=A actual=B isolated=false
+[TASK] mode=global expected=B actual=B isolated=true</code></pre>
+    <p>A 先写入全局变量，等待期间 B 覆盖它，所以 A 恢复执行时读到了 B。这正是并发请求不能把 Trace ID 放普通全局变量的原因。</p>
+
+    <h2>2. 用 AsyncLocalStorage 隔离</h2>
+    <pre><code>npm run lab:context:als</code></pre>
+    <pre><code>[TASK] mode=als expected=A actual=A isolated=true
+[TASK] mode=als expected=B actual=B isolated=true</code></pre>
+    <p><code>storage.run(store, callback)</code> 激活 Store；在 callback 内创建的 Promise、Timer 等异步资源恢复执行时，<code>getStore()</code> 仍返回所属调用链的 Store。</p>
+
+    <h2>3. 换成 OTel Context 与 Active Span</h2>
+    <pre><code>npm run lab:context:otel</code></pre>
+    <pre><code>[TASK] mode=otel expected=A actual=A isolated=true
+[RELATION] task=A active_matches=true same_trace=true parent_matches=true</code></pre>
+    <p><code>startActiveSpan</code> 不只创建 Span，还在 callback 执行期间把它写入当前 Context。因此异步等待后仍能取回任务值，随后调用 <code>startSpan('task-child')</code> 会自动使用 Active Span 作为父级。</p>
+  </section>
+
+  <section>
+    <h2><code>startSpan</code> 和 <code>startActiveSpan</code> 的关键差别</h2>
+    <table>
+      <thead><tr><th>API</th><th>创建 Span</th><th>自动成为当前 Span</th><th>子 Span 自动继承</th></tr></thead>
+      <tbody>
+        <tr><td><code>startSpan</code></td><td>是</td><td>否</td><td>只有当前 Context 已含父 Span 时</td></tr>
+        <tr><td><code>startActiveSpan</code></td><td>是</td><td>是，仅 callback 生命周期</td><td>是</td></tr>
+      </tbody>
+    </table>
+    <p class="check">无论哪种方式，都要显式调用 <code>span.end()</code>；激活和结束是两件事。</p>
+  </section>
+
+  <section>
+    <h2>映射回当前项目</h2>
+    <table>
+      <tbody>
+        <tr><th><code>AsyncLocalStorageContextManager</code></th><td>Node SDK 用它让 Active Span 跟随 Promise、Timer 和请求回调。</td></tr>
+        <tr><th>checkout → inventory</th><td>客户端从 Active Context inject；服务端 extract 后激活新的 SERVER Span。</td></tr>
+        <tr><th>checkout → RabbitMQ → payment</th><td>发布时 inject 消息 Header；消费时 extract，再进入新的本地 Context。</td></tr>
+        <tr><th>日志 Trace ID</th><td>Logger 从当前 Active Span 读取，不需要把 Trace ID 手工层层传参。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>排错顺序</h2>
+    <ol>
+      <li>在异步操作前后打印 <code>trace.getActiveSpan()?.spanContext()</code>。</li>
+      <li>确认 SDK 注册了 Context Manager，且初始化早于业务模块。</li>
+      <li>确认 callback 真正在 <code>context.with</code> 或 <code>startActiveSpan</code> 内执行。</li>
+      <li>若只在跨服务后断链，检查 inject/extract 与 Header，不要先怀疑 ALS。</li>
+      <li>旧 callback API 丢 Context 时，用 <code>AsyncResource</code> 或显式绑定定位边界。</li>
+    </ol>
+    <pre><code>npm run test:context-lab</code></pre>
+  </section>
+
+  <section>
+    <h2>即时自测</h2>
+    <details><summary>为什么两个请求不能共享一个 currentTraceId？</summary><p>因为等待 I/O 时另一个请求会覆盖它；事件循环恢复第一个请求时只能读到最后写入值。</p></details>
+    <details><summary>Context 会自动跨 HTTP 或 RabbitMQ 吗？</summary><p>不会。进程内由 Context Manager 维护；跨进程必须用 Propagator inject/extract Header。</p></details>
+    <details><summary>为什么创建 Span 后仍可能没有 Active Span？</summary><p><code>startSpan</code> 只创建对象，不改变当前 Context；使用 <code>startActiveSpan</code> 或 <code>context.with(trace.setSpan(...))</code> 才会激活。</p></details>
+  </section>
+
+  <footer>速查：<a href="../reference/context-propagation-cheatsheet.html">Context 与传播速查表</a>。本课只新增独立实验，没有修改现有服务、端口或 Collector。</footer>
+</main>
+</body>
+</html>

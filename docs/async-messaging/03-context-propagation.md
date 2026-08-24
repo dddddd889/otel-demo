@@ -18,6 +18,149 @@ checkout active context
 
 本步没有启用 amqplib 自动插桩，也没有创建 Producer/Consumer Span 或 Span Link。因此 payment 日志可以带原 Trace ID，但 Jaeger 中暂时没有 payment-service Span；这是 Commit 4 的内容。
 
+## 为什么并发异步上下文不会串
+
+进程内的 OpenTelemetry Context 依赖 Node.js 异步上下文隔离：每条 Promise、回调和 `async/await` 调用链都有自己的当前 Context。它解决的是“多个请求同时执行时，深层代码如何拿到正确的当前 Span”。
+
+### 反例：用全局变量保存当前请求
+
+```js
+'use strict';
+
+let currentRequestId;
+
+// 模拟一条会暂停并恢复的异步请求。
+async function handleRequest(requestId, delay) {
+  currentRequestId = requestId;
+  console.log('开始：', currentRequestId);
+  await new Promise((resolve) => setTimeout(resolve, delay));
+  console.log('结束：', currentRequestId);
+}
+
+Promise.all([
+  handleRequest('request-A', 100),
+  handleRequest('request-B', 20),
+]);
+```
+
+可能输出：
+
+```text
+开始：request-A
+开始：request-B
+结束：request-B
+结束：request-B
+```
+
+A 等待期间，B 覆盖了同一个全局变量；A 恢复执行时读到的是 B，这就是“上下文串了”。
+
+```mermaid
+sequenceDiagram
+  participant A as 请求 A
+  participant G as 全局变量
+  participant B as 请求 B
+  A->>G: currentRequestId = A
+  Note over A: await，暂停
+  B->>G: currentRequestId = B
+  B->>G: 读取 B
+  A->>G: 恢复后也读取到 B
+```
+
+### AsyncLocalStorage：每条异步链保存一份数据
+
+```js
+'use strict';
+
+const { AsyncLocalStorage } = require('node:async_hooks');
+
+const requestContext = new AsyncLocalStorage();
+
+// 从当前异步调用链读取请求 ID。
+function getCurrentRequestId() {
+  return requestContext.getStore()?.requestId;
+}
+
+// 在独立上下文中运行一条异步请求。
+async function handleRequest(requestId, delay) {
+  return requestContext.run({ requestId }, async () => {
+    console.log('开始：', getCurrentRequestId());
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    console.log('结束：', getCurrentRequestId());
+  });
+}
+
+Promise.all([
+  handleRequest('request-A', 100),
+  handleRequest('request-B', 20),
+]);
+```
+
+此时输出为：
+
+```text
+开始：request-A
+开始：request-B
+结束：request-B
+结束：request-A
+```
+
+可以把内存结构理解为：
+
+```mermaid
+flowchart TD
+  P[Node.js 进程]
+  P --> A[异步链 A]
+  P --> B[异步链 B]
+  A --> CA[requestId=A / activeSpan=A]
+  B --> CB[requestId=B / activeSpan=B]
+```
+
+### 对应到 OpenTelemetry Context API
+
+OpenTelemetry 的 Node.js Context Manager 使用这种异步隔离机制保存当前 Context：
+
+| OpenTelemetry API | 类似的 AsyncLocalStorage 操作 |
+| --- | --- |
+| `context.with(ctx, callback)` | `storage.run(ctx, callback)` |
+| `context.active()` | `storage.getStore()` |
+| `trace.getActiveSpan()` | 从当前 Store 读取 Active Span |
+| `startActiveSpan()` | 创建 Span 并在回调期间激活它 |
+
+因此并发请求的执行顺序可以交错，但 `trace.getActiveSpan()` 仍会读取各自的 Span：
+
+```text
+request-A → span-A → database-span-A
+request-B → span-B → database-span-B
+```
+
+这个原理可在一个独立 Node.js 脚本中用终端输出或 Console Exporter 验证，不需要启动 checkout、inventory、payment 或 Collector。
+
+### 为什么 RabbitMQ 仍然需要 traceparent
+
+`AsyncLocalStorage` 只能隔离同一个 Node.js 进程中的异步调用，不能跨进程、网络或消息队列传递内存：
+
+```mermaid
+flowchart LR
+  subgraph Checkout[checkout 进程]
+    AC[AsyncLocalStorage Context]
+  end
+  AC -->|inject| H[AMQP Header: traceparent + baggage]
+  H -->|RabbitMQ 传输| E[extract]
+  subgraph Payment[payment 进程]
+    E --> WC[context.with]
+    WC --> PC[新的进程内 Async Context]
+  end
+```
+
+所以两类传播需要配合：
+
+```text
+同一进程内：AsyncLocalStorage / Context Manager 隔离并发调用链
+跨进程之间：inject → traceparent → extract 传递链路身份
+```
+
+可以记成一句话：**进程内靠 Context 隔离，进程间靠 Header 接力。**
+
 ## 关键词解释
 
 ### `propagation` 与全局 Propagator

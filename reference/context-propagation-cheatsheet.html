@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Context 与传播速查表</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow">Reference</p>
+  <h1>Context 与传播速查表</h1>
+  <table>
+    <tbody>
+      <tr><th>AsyncLocalStorage</th><td>Node.js 提供的异步调用链本地存储。</td></tr>
+      <tr><th>OTel Context</th><td>不可变键值容器，可携带 Active Span、Baggage 等。</td></tr>
+      <tr><th>Context Manager</th><td>让当前 Context 跟随 Promise、Timer 和回调。</td></tr>
+      <tr><th><code>context.active()</code></th><td>读取当前 Context；没有激活范围时返回根 Context。</td></tr>
+      <tr><th><code>context.with(ctx, fn)</code></th><td>仅在 fn 及其派生异步工作中激活 ctx。</td></tr>
+      <tr><th><code>startSpan</code></th><td>创建 Span，但不会主动激活它。</td></tr>
+      <tr><th><code>startActiveSpan</code></th><td>创建并在 callback 中激活 Span。</td></tr>
+      <tr><th>Propagation</th><td>跨进程 inject/extract <code>traceparent</code>、<code>baggage</code>。</td></tr>
+    </tbody>
+  </table>
+  <h2>边界口诀</h2>
+  <pre><code>进程内：Context Manager
+跨进程：Propagator + Carrier
+创建 Span：startSpan
+创建并激活：startActiveSpan
+结束 Span：始终显式 span.end()</code></pre>
+  <h2>实验命令</h2>
+  <pre><code>npm run lab:context:global
+npm run lab:context:als
+npm run lab:context:otel
+npm run test:context-lab</code></pre>
+  <footer><a href="../lessons/0002-context-follows-async-work.html">返回完整课程</a></footer>
+</main>
+</body>
+</html>

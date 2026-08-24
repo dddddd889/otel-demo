@@ -12,6 +12,12 @@
   官方 HTTP/HTTPS 插桩 API。用于查看支持范围、Hook 和配置项。
 - [Instrumentation 实现指南](https://github.com/open-telemetry/opentelemetry-js-contrib/blob/main/GUIDELINES.md)
   官方维护者指南。用于理解模块加载 Hook、patch/unpatch 和诊断消息。
+- [Node.js：Async Context](https://nodejs.org/api/async_context.html)
+  官方 `AsyncLocalStorage.run/getStore` 与 Context 丢失排查说明。
+- [OpenTelemetry JavaScript：Context](https://opentelemetry.io/docs/languages/js/context/)
+  官方进程内 Context、Active Span 与 Context Manager 说明。
+- [OpenTelemetry JavaScript：Propagation](https://opentelemetry.io/docs/languages/js/propagation/)
+  官方跨进程 inject/extract 与 Carrier 说明。
 
 ## Wisdom (Communities)
 
