@@ -20,6 +20,33 @@ checkout active context
 
 ## 关键词解释
 
+### `propagation` 与全局 Propagator
+
+`propagation` 是 OpenTelemetry 的上下文传播 API，负责将当前 Context 注入 HTTP Header、AMQP Header 等载体，以及从收到的载体中提取 Context。以下配置为应用注册一个全局传播器：
+
+```js
+propagation.setGlobalPropagator(new CompositePropagator({
+  propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()],
+}));
+```
+
+各组件的作用如下：
+
+- `setGlobalPropagator(...)` 指定全局使用的传播规则；后续的 `propagation.inject()` 和 `propagation.extract()` 都会使用它。
+- `CompositePropagator` 将多种传播器组合成一个传播器。
+- `W3CTraceContextPropagator` 负责 `traceparent` 和可选的 `tracestate`，传播 Trace ID、上游 Span ID 和采样标志。
+- `W3CBaggagePropagator` 负责 `baggage`，传播少量业务诊断上下文。
+
+它只定义“上下文如何编码和解析”，不会自动完成传输，也不会自动创建 Span。真正跨进程传播时，还需要 HTTP/AMQP 自动插桩，或由代码显式调用 `inject()` 和 `extract()`：
+
+```text
+发送方当前 Context
+  → inject
+  → HTTP Header / AMQP Header: traceparent + baggage
+  → extract
+  → 接收方 Context
+```
+
 ### `traceparent`
 
 `traceparent` 是 W3C Trace Context 定义的标准传播字段，用于告诉消息消费者“这条消息属于哪条 Trace，上游 Span 是谁”。典型格式如下：

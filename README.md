@@ -4,6 +4,7 @@
 
 按 Git 提交拆分的改动、测试和学习文档见 [按 Commit 学习 OpenTelemetry Demo](docs/commit-history/README.md)。
 异步消息按五个独立学习 commit 递进，见 [异步消息传播学习路线](docs/async-messaging/README.md)。
+完成异步链路后，从[最小自动插桩实验](lessons/0001-how-node-auto-instrumentation-works.html)回到 OpenTelemetry 原理主线。
 
 ```text
 客户端 → checkout-service:3000 → inventory-service:3002
@@ -22,6 +23,7 @@ Grafana ──> Prometheus + Loki + Jaeger
 ## 功能清单
 
 - Node.js HTTP、Express、Redis、MySQL 自动插桩
+- 独立的 baseline / 手写 HTTP patch / 官方 HTTP instrumentation 对比实验
 - `validate-cart`、`create-order` 等业务 Span 手动插桩
 - 跨 HTTP 和 RabbitMQ 的 W3C Trace Context 与 Baggage 传播
 - RabbitMQ Producer/Consumer Span 与异步 Span Link

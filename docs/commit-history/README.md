@@ -7,9 +7,10 @@
 | 1 | `d226a31` | 初始化单服务三类遥测 | [01-d226a31-init.md](01-d226a31-init.md) |
 | 2 | `477a32e` | 跨服务采集、存储、查询和关联 | [02-477a32e-observability.md](02-477a32e-observability.md) |
 | 3 | `8a0461b` | 可控故障与排障练习 | [03-8a0461b-troubleshooting.md](03-8a0461b-troubleshooting.md) |
-| 4 | 尚未提交 | 智能尾采样与 Metric 高基数治理 | [04-working-tree-sampling.md](04-working-tree-sampling.md) |
+| 4 | `c581d37` | 智能尾采样与 Metric 高基数治理 | [04-working-tree-sampling.md](04-working-tree-sampling.md) |
+| 5 | 尚未提交 | Node.js 自动插桩原理实验 | [课程：自动插桩怎么工作](../../lessons/0001-how-node-auto-instrumentation-works.html) |
 
-异步消息使用另一条递进学习线，见 [异步消息传播学习路线](../async-messaging/README.md)。RabbitMQ 基础流为 `8764dce`，payment 接入为 `c7d3ec7`，上下文传播为 `84b1fa3`，消息 Span 为 `8296ff9`；重试与 DLQ 正在工作区实现。
+异步消息使用另一条递进学习线，见 [异步消息传播学习路线](../async-messaging/README.md)。RabbitMQ 基础流为 `8764dce`，payment 接入为 `c7d3ec7`，上下文传播为 `84b1fa3`，消息 Span 为 `8296ff9`，重试与 DLQ 为 `7aecc6d`。
 
 ## 推荐学习方式
 
@@ -17,4 +18,4 @@
 
 ## 异步能力边界
 
-当前已有 RabbitMQ 基础流、payment 接入、异步 Trace Context、Baggage、Producer/Consumer Span 与 Span Link；工作区实现了有限重试、死信队列及其可观测性。
+异步支线已经覆盖 RabbitMQ 基础流、payment 接入、Trace Context、Baggage、Producer/Consumer Span、Span Link、有限重试和 DLQ。当前工作区回到 OpenTelemetry 原理主线，用隔离实验解释自动插桩。

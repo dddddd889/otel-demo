@@ -6,17 +6,18 @@ Checkout, inventory, and payment live in `app.js`, `inventory-service.js`, and `
 
 ## Build, Test, and Development Commands
 
-- `npm install`: install dependencies. Use Node.js 20 or newer.
-- `npm run infra:up`: start infrastructure, including RabbitMQ and its UI.
+- `npm install`: install dependencies; requires Node.js 20+.
+- `npm run infra:up`: start infrastructure and RabbitMQ UI.
 - `npm start`: run checkout on port 3000 and inventory on port 3002.
 - `npm run start:payment`: consume queued orders and print payment results.
-- `npm run check`: perform JavaScript syntax checks.
+- `npm run check`: check JavaScript syntax.
 - `npm run test:smoke`: verify traces, logs, baggage, exemplars, alerts, and health filtering.
 - `npm run test:scenarios`: verify slow, MySQL-error, and Redis-error troubleshooting paths.
 - `npm run test:sampling`: verify tail-sampling decisions and stable metric labels.
 - `npm run test:rabbitmq`: verify one isolated publish, consume, and ACK cycle.
 - `npm run test:message-context` / `npm run test:messaging-spans`: verify AMQP context and Span tree.
 - `npm run test:messaging-e2e` / `npm run test:retry-dlq`: verify running message flows.
+- `npm run test:auto-instrumentation`: compare baseline, manual patch, and official HTTP instrumentation.
 - `npm run rabbitmq:producer` / `npm run rabbitmq:consumer`: exercise the queue manually.
 - `npm run traffic`: continuously generate demo traffic and print direct observability links.
 - `docker compose config --quiet`: validate Compose configuration.
@@ -28,7 +29,7 @@ Use CommonJS, `'use strict'`, two-space indentation, semicolons, and trailing co
 
 ## Testing Guidelines
 
-Node's test runner has no coverage threshold. Changes must pass `npm run check`, Compose validation, and relevant tests. Exercise manual scenarios too. Name unit tests `test/*.test.js`.
+Node's test runner has no coverage threshold. Changes must pass checks and relevant tests. Exercise manual scenarios too. Name unit tests `test/*.test.js`.
 
 ## Commit & Pull Request Guidelines
 

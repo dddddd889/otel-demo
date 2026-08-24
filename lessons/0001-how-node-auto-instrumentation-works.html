@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Node.js 自动插桩到底做了什么</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow">OpenTelemetry 原理课 · 01</p>
+  <h1>自动插桩不是监听网络，它是在模块被使用前改写函数。</h1>
+  <p class="lede">用三个完全隔离的进程对比同一次 HTTP 请求：没有插桩、自己 patch、官方 instrumentation。完成时间约 10 分钟，不需要 Docker，也不会启动现有业务服务。</p>
+
+  <section>
+    <h2>你将亲手证明</h2>
+    <div class="flow">
+      <div><strong>Baseline</strong><br>没有 Span，也没有 <code>traceparent</code></div>
+      <div><strong>Manual patch</strong><br>改写 <code>http.get</code>，产生 CLIENT Span</div>
+      <div><strong>Official</strong><br>自动产生 CLIENT + SERVER Span</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>1. 先看没有插桩</h2>
+    <pre><code>npm run lab:auto:baseline</code></pre>
+    <p>预期只出现：</p>
+    <pre><code>[RESULT] mode=baseline downstream_traceparent=无</code></pre>
+    <p class="check">检查点：没有任何 <code>[SPAN]</code> 行。</p>
+
+    <h2>2. 再启用手写 patch</h2>
+    <pre><code>npm run lab:auto:manual</code></pre>
+    <p>预期出现一个 CLIENT Span，下游收到同一 Span 注入的 W3C Header：</p>
+    <pre><code>[SPAN] name=manual-http-get kind=CLIENT trace_id=... span_id=...
+[RESULT] mode=manual downstream_traceparent=00-TRACE_ID-SPAN_ID-01</code></pre>
+    <p>打开 <code>labs/auto-instrumentation/manual-http-patch.js</code>，按这个顺序读：</p>
+    <ol>
+      <li>保存原始 <code>http.get</code>。</li>
+      <li>把 <code>http.get</code> 替换为 <code>patchedGet</code>。</li>
+      <li>调用 <code>startActiveSpan</code>，使新 Span 成为当前 Context。</li>
+      <li>把当前 Context 注入请求 Headers。</li>
+      <li>调用原始函数，并在响应结束或错误时结束 Span。</li>
+      <li><code>disable()</code> 恢复原始函数。</li>
+    </ol>
+
+    <h2>3. 最后运行官方 HTTP instrumentation</h2>
+    <pre><code>npm run lab:auto:official</code></pre>
+    <p>预期产生两个 Span：</p>
+    <pre><code>[SPAN] name=GET kind=SERVER trace_id=同一个 parent_span_id=客户端SpanID
+[SPAN] name=GET kind=CLIENT trace_id=同一个 parent_span_id=无</code></pre>
+    <p>官方版本不仅包装客户端调用，还包装下游的 <code>http.createServer</code> 请求处理，并自动提取 <code>traceparent</code>，所以 SERVER Span 成为 CLIENT Span 的子级。</p>
+  </section>
+
+  <section>
+    <h2>为什么必须先加载 instrumentation</h2>
+    <div class="card">
+      <code>node --require instrumentation.js app.js</code> 的意义不是“后台监听”，而是让 patch 在业务代码首次加载 <code>http</code>、Express 等模块之前注册。模块已经加载并缓存后才启动 instrumentation，patch 可能来不及应用。
+    </div>
+    <p>本实验特意把官方初始化文件放进 <code>--require</code>：</p>
+    <pre><code>node --require ./labs/auto-instrumentation/official-instrumentation.js \
+  labs/auto-instrumentation/run-lab.js official</code></pre>
+  </section>
+
+  <section>
+    <h2>把实验映射回现有项目</h2>
+    <table>
+      <thead><tr><th>实验</th><th>现有项目</th></tr></thead>
+      <tbody>
+        <tr><td><code>official-instrumentation.js</code></td><td>根目录 <code>instrumentation.js</code></td></tr>
+        <tr><td><code>HttpInstrumentation</code></td><td><code>getNodeAutoInstrumentations()</code> 中的 HTTP 插桩</td></tr>
+        <tr><td>一行学习 Exporter</td><td>OTLP Exporter → Collector → Jaeger</td></tr>
+        <tr><td>随机端口下游</td><td>checkout → inventory</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>即时自测</h2>
+    <details><summary>为什么这不叫“直接监听底层网络”？</summary><p>因为核心动作是替换模块导出的函数或利用模块加载 Hook；网络调用仍由原始 <code>http.get</code> 完成，插桩只是在调用前后创建遥测并传播 Context。</p></details>
+    <details><summary>为什么手写版本只有 CLIENT，没有 SERVER？</summary><p>这个教学 patch 只替换了 <code>http.get</code>。官方 HTTP instrumentation 还覆盖服务端请求入口，并从 Header 提取父 Context。</p></details>
+    <details><summary>Trace ID 和 Span ID 在 Header 中如何对应？</summary><p><code>traceparent=00-TRACE_ID-SPAN_ID-01</code>。下游保留 Trace ID，以 Header 中的 Span ID 作为 SERVER Span 的父级。</p></details>
+    <pre><code>npm run test:auto-instrumentation</code></pre>
+  </section>
+
+  <section>
+    <h2>继续追源码</h2>
+    <p>主资料：<a href="https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_instrumentation-http.html">官方 HTTP Instrumentation API</a>。随后阅读 <a href="https://github.com/open-telemetry/opentelemetry-js-contrib/blob/main/GUIDELINES.md">Instrumentation 实现指南</a>中的 patch/unpatch 与 module hook。</p>
+    <p>速查版本：<a href="../reference/auto-instrumentation-cheatsheet.html">自动插桩速查表</a>。任何一行不清楚，都可以继续问我并对照当前实验修改。</p>
+  </section>
+
+  <footer>这一步只新增独立实验和学习资料；原有 <code>npm start</code>、服务端口和 Collector 配置未修改。</footer>
+</main>
+</body>
+</html>

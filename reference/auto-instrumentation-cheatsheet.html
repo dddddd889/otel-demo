@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Node.js 自动插桩速查表</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow">Reference</p>
+  <h1>Node.js 自动插桩速查表</h1>
+  <table>
+    <tbody>
+      <tr><th>本质</th><td>在模块加载或函数调用边界执行 patch/unpatch，不是旁路抓包。</td></tr>
+      <tr><th>加载顺序</th><td>Instrumentation 必须早于被插桩模块；常用 <code>--require</code> / <code>--import</code>。</td></tr>
+      <tr><th>调用入口</th><td>创建 CLIENT / SERVER Span，并通过 Context Manager 激活当前 Span。</td></tr>
+      <tr><th>跨进程</th><td>客户端 inject <code>traceparent</code>；服务端 extract 后创建子 Span。</td></tr>
+      <tr><th>异步隔离</th><td>Node.js 通常用 AsyncLocalStorage 保存每条异步调用链的 Context。</td></tr>
+      <tr><th>结束时机</th><td>成功、错误、超时、取消都必须结束 Span，且只能结束一次。</td></tr>
+      <tr><th>自动 vs 手动</th><td>自动插桩记录框架/依赖边界；手动 Span 补充业务语义，两者可以共存。</td></tr>
+      <tr><th>常见失败</th><td>初始化太晚、模块版本不支持、重复 patch、Context Manager 缺失、Exporter 未刷新。</td></tr>
+    </tbody>
+  </table>
+  <h2>最小骨架</h2>
+  <pre><code>保存 original
+→ 替换为 patched
+→ startActiveSpan
+→ inject(context.active(), headers)
+→ 调用 original
+→ response/error 时 span.end()
+→ disable 时恢复 original</code></pre>
+  <h2>当前实验</h2>
+  <pre><code>npm run lab:auto:baseline
+npm run lab:auto:manual
+npm run lab:auto:official
+npm run test:auto-instrumentation</code></pre>
+  <footer><a href="../lessons/0001-how-node-auto-instrumentation-works.html">返回完整课程</a></footer>
+</main>
+</body>
+</html>
