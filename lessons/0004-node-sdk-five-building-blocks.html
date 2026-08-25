@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NodeSDK 中的 Resource、Trace、Metric、LogRecord 和 Instrumentation</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow">OpenTelemetry 原理课 · 04</p>
+  <h1>三种信号共用一张来源身份证，Instrumentation 负责自动造数据。</h1>
+  <p class="lede">把 <code>instrumentation.js</code> 的 NodeSDK 配置还原成一条可观测数据流。</p>
+
+  <section>
+    <h2>不要把它们看成五种信号</h2>
+    <div class="flow">
+      <div><strong>来源</strong><br><code>Resource</code></div>
+      <div><strong>数据</strong><br><code>Trace</code> / <code>Metric</code> / <code>LogRecord</code></div>
+      <div><strong>生产者</strong><br><code>instrumentations</code> 与手动 API</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>五个词各自在哪一层</h2>
+    <table>
+      <thead><tr><th>名称</th><th>含义</th><th>项目中的例子</th><th>最终查看</th></tr></thead>
+      <tbody>
+        <tr><td><code>Resource</code></td><td>描述“谁产生的数据”，会附加到三种信号上</td><td><code>service.name</code>、<code>service.version</code></td><td>Jaeger、Prometheus、Loki 都能用到</td></tr>
+        <tr><td><code>Trace</code></td><td>一次请求的调用路径，由多个 Span 构成</td><td>checkout → inventory → payment</td><td>Jaeger</td></tr>
+        <tr><td><code>Metric</code></td><td>在时间维度上聚合的数值</td><td><code>checkout.requests</code>、请求耗时直方图</td><td>Prometheus / Grafana</td></tr>
+        <tr><td><code>LogRecord</code></td><td>一条独立结构化日志</td><td>严重级别、body、attributes、Trace ID</td><td>Loki / Grafana Explore</td></tr>
+        <tr><td><code>instrumentations</code></td><td>对 Express、HTTP、MySQL 等库进行 patch，自动创建遥测数据</td><td><code>getNodeAutoInstrumentations()</code></td><td>它自身不是可查询的信号</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>映射到 NodeSDK</h2>
+    <pre><code>new NodeSDK({
+  resource,             // 三种信号共用的来源身份
+  traceExporter,        // Span → OTLP Traces
+  metricReaders,        // Metric 聚合后 → OTLP Metrics
+  logRecordProcessors, // LogRecord 处理后 → OTLP Logs
+  instrumentations,     // 自动 patch 库并创建遥测数据
+});</code></pre>
+    <p class="card"><code>Resource</code> 不是每条业务请求的参数，而是进程、服务、容器或主机级别的身份。订单 ID 这类每次请求不同的数据，应该放在 Span Attribute 或 LogRecord Attribute，不应该放在 Resource。</p>
+  </section>
+
+  <section>
+    <h2>数据流</h2>
+    <pre><code>业务请求
+  → Instrumentation 或手动 API
+  → Span / Metric / LogRecord
+  → 附加 Resource: service.name=checkout-service
+  → Processor / Reader
+  → OTLP Exporter
+  → Collector
+  → Jaeger / Prometheus / Loki</code></pre>
+  </section>
+
+  <section>
+    <h2>即时自测</h2>
+    <details><summary><code>service.name</code> 应放在 Metric Attribute 吗？</summary><p>通常由 Resource 统一提供，无需在每次 Metric 记录时重复添加。</p></details>
+    <details><summary><code>getNodeAutoInstrumentations()</code> 是后端吗？</summary><p>不是。它在应用进程内 patch 依赖库，自动生成 Span 等数据。</p></details>
+    <details><summary>Trace 和 Span 是同一个层级吗？</summary><p>不是。Trace 是整条调用链，Span 是其中的一段操作。</p></details>
+  </section>
+
+  <footer>延伸阅读：<a href="https://opentelemetry.io/docs/languages/js/instrumentation/">OpenTelemetry JavaScript Instrumentation</a>。可继续追问 Processor、Reader 和 Exporter 的区别。</footer>
+</main>
+</body>
+</html>

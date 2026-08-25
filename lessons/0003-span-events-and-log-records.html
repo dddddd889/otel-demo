@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Span Event、LogRecord 与 recordException</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow">OpenTelemetry 原理课 · 03</p>
+  <h1>Event 住在 Span 里；LogRecord 走独立的 Logs 管道。</h1>
+  <p class="lede">用当前项目的异常和关联日志，分清三个容易混淆的词。约 5 分钟。</p>
+
+  <section>
+    <h2>先看存放关系</h2>
+    <div class="flow">
+      <div><strong>Span Event</strong><br>存在 Span 的 <code>events[]</code></div>
+      <div><strong>LogRecord</strong><br>独立 Logs 信号，可用 Trace ID 关联</div>
+      <div><strong>recordException</strong><br>生成名为 <code>exception</code> 的 Span Event</div>
+    </div>
+    <p class="card"><code>record</code> 不是第四种数据；它只是“记录”这个动作。在 <code>recordException(error)</code> 里，记录结果属于 Trace 信号。</p>
+  </section>
+
+  <section>
+    <h2>1. Event：Span 时间线上的一个瞬间</h2>
+    <pre><code>span.addEvent('inventory-cache-miss', {
+  'demo.cache.system': 'redis',
+});</code></pre>
+    <p>Event 有名称、时间戳和属性，但没有自己的 Span ID，也不是 Span 树的一个节点。它适合表示“这个操作进行到某时发生了什么”。</p>
+    <p>项目中的 <code>span.recordException(error)</code> 等价于按 OpenTelemetry 异常语义生成一个 <code>exception</code> Event，通常包含 <code>exception.type</code>、<code>exception.message</code> 和 <code>exception.stacktrace</code>。</p>
+  </section>
+
+  <section>
+    <h2>2. LogRecord：独立的日志记录</h2>
+    <pre><code>logger.emit({
+  severityText: 'ERROR',
+  body: '支付失败',
+  attributes: { 'demo.order.id': orderId },
+});</code></pre>
+    <p>这会生成 LogRecord，包含时间、严重级别、正文、属性，以及当前 Context 中可用的 Trace ID / Span ID。它不存在 Span 的 <code>events[]</code> 中，而是经 Logs SDK 独立导出。</p>
+  </section>
+
+  <section>
+    <h2>3. 在这个项目里到哪里看</h2>
+    <table>
+      <thead><tr><th>代码</th><th>数据落点</th><th>传输与查看</th></tr></thead>
+      <tbody>
+        <tr><td><code>span.addEvent(...)</code></td><td>当前 Span 的 <code>events[]</code></td><td>OTLP Traces → Collector → Jaeger，打开 Span 看 Events</td></tr>
+        <tr><td><code>span.recordException(error)</code></td><td>当前 Span 的 <code>exception</code> Event</td><td>OTLP Traces → Collector → Jaeger，打开失败 Span</td></tr>
+        <tr><td><code>logger.emit(...)</code></td><td>独立 LogRecord</td><td>OTLP Logs → Collector → Loki，在 Grafana Explore 查询</td></tr>
+        <tr><td><code>console.log(...)</code></td><td>本项目的终端 stdout</td><td>终端；它不会因为调用了 console API 就自动变成 OTel LogRecord</td></tr>
+      </tbody>
+    </table>
+    <p><code>instrumentation.js</code> 中的 <code>traceExporter</code> 发送 Span 及其 Events；<code>logExporter</code> 和 <code>BatchLogRecordProcessor</code> 发送 LogRecord。两条管道是分开的。</p>
+  </section>
+
+  <section>
+    <h2>怎么选</h2>
+    <ul>
+      <li>只对某个 Span 有意义的低频关键时刻：用 Event。</li>
+      <li>需要严重级别、全文检索、长期保留或独立查询：用 LogRecord。</li>
+      <li>异常要挂在失败 Span 上：用 <code>recordException()</code>，并另行 <code>setStatus(ERROR)</code>。</li>
+      <li>不要默认同一个异常在多层重复记录，否则会产生噪声。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>即时自测</h2>
+    <details><summary><code>recordException()</code> 会创建新 Span 吗？</summary><p>不会。它向现有 Span 的 <code>events[]</code> 添加 <code>exception</code> Event。</p></details>
+    <details><summary>Event 与 LogRecord 都有时间戳，它们是同一个东西吗？</summary><p>不是。Event 归属某个 Span；LogRecord 是独立 Logs 信号，只是可以通过 Trace ID / Span ID 关联。</p></details>
+    <details><summary>为什么 <code>recordException()</code> 后还要 <code>setStatus(ERROR)</code>？</summary><p>因为“记录异常细节”和“标记该 Span 执行失败”是两个独立动作。</p></details>
+  </section>
+
+  <footer>主要依据：<a href="https://opentelemetry.io/docs/specs/otel/trace/api/#add-events">OpenTelemetry Trace API</a> 与 <a href="https://opentelemetry.io/docs/specs/otel/logs/api/">Logs API</a>。如果哪个 UI 字段仍然对不上，可继续追问具体界面。</footer>
+</main>
+</body>
+</html>

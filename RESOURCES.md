@@ -18,6 +18,10 @@
   官方进程内 Context、Active Span 与 Context Manager 说明。
 - [OpenTelemetry JavaScript：Propagation](https://opentelemetry.io/docs/languages/js/propagation/)
   官方跨进程 inject/extract 与 Carrier 说明。
+- [OpenTelemetry Trace API：Span Events 与 RecordException](https://opentelemetry.io/docs/specs/otel/trace/api/#add-events)
+  官方 Trace API 规范。用于区分 Span Event、`addEvent()` 和 `recordException()`。
+- [OpenTelemetry Logs API](https://opentelemetry.io/docs/specs/otel/logs/api/)
+  官方 Logs API 规范。用于理解 `Logger.emit()` 如何生成独立 LogRecord。
 
 ## Wisdom (Communities)
 

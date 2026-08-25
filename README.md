@@ -2,10 +2,30 @@
 
 这是一个 Node.js + OpenTelemetry 可观测性示例，通过 Jaeger、Prometheus、Loki 和 Grafana 统一体验分布式链路、指标、日志及三者关联。
 
-按 Git 提交拆分的改动、测试和学习文档见 [按 Commit 学习 OpenTelemetry Demo](docs/commit-history/README.md)。
-异步消息按五个独立学习 commit 递进，见 [异步消息传播学习路线](docs/async-messaging/README.md)。
-完成异步链路后，从[最小自动插桩实验](lessons/0001-how-node-auto-instrumentation-works.html)回到 OpenTelemetry 原理主线。
-下一课用并发实验解释 [AsyncLocalStorage 与 OTel Context](lessons/0002-context-follows-async-work.html)。
+按 Git 提交拆分的改动、测试和学习文档见 [按 Commit 学习 OpenTelemetry Demo](docs/commit-history/README.md)；异步消息支线见 [异步消息传播学习路线](docs/async-messaging/README.md)。
+
+## OpenTelemetry 原理学习路线
+
+完成功能体验后，按以下顺序回到 SDK 和数据流原理。README 先给出每课要解决的问题，点击课程再进行独立实验或自测。
+
+| 顺序 | 主题 | 先带着这个问题学 |
+| --- | --- | --- |
+| 1 | [自动插桩如何工作](lessons/0001-how-node-auto-instrumentation-works.html) | Instrumentation 何时 patch HTTP 模块，又如何创建 Active Span？ |
+| 2 | [AsyncLocalStorage 与 OTel Context](lessons/0002-context-follows-async-work.html) | 并发请求为什么不会串 Trace，Context 又如何跨 HTTP/MQ？ |
+| 3 | [Span Event、LogRecord 与 recordException](lessons/0003-span-events-and-log-records.html) | Event 记在哪里，LogRecord 走哪条管道，<code>recordException()</code> 到底生成什么？ |
+| 4 | [Resource、Trace、Metric、LogRecord 与 Instrumentation](lessons/0004-node-sdk-five-building-blocks.html) | 哪些是信号，哪些是来源身份或数据生产者？ |
+
+先记住第 4 课的总体关系：
+
+```text
+Instrumentation 或手动 API
+  → 产生 Span / Metric / LogRecord
+  → 统一附加 Resource（例如 service.name）
+  → Processor / Reader → Exporter → Collector
+  → Jaeger / Prometheus / Loki
+```
+
+`Resource` 是来源身份，`Trace`、`Metric`、`LogRecord` 是遥测信号，`instrumentations` 是自动生成遥测数据的插件集合，本身不是信号或存储后端。
 
 ```text
 客户端 → checkout-service:3000 → inventory-service:3002
