@@ -3,47 +3,115 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenTelemetry Node.js 原理学习路线</title>
+  <meta name="description" content="OpenTelemetry Node.js 可运行 Demo 与原理学习路线">
+  <title>OpenTelemetry Node.js：从运行 Demo 到理解原理</title>
   <link rel="stylesheet" href="assets/lesson.css">
 </head>
 <body>
-<main>
-  <p class="eyebrow">OpenTelemetry Node.js Demo</p>
-  <h1>从会用 Demo，到真正理解遥测数据如何产生和传递。</h1>
-  <p class="lede">按顺序学习自动插桩、Context、Span Event、LogRecord 和 NodeSDK 数据流。</p>
+<main class="landing">
+  <header class="hero">
+    <p class="eyebrow">OpenTelemetry Node.js 全链路 Demo</p>
+    <h1>不只是把 Demo 跑起来，还要知道数据从哪里来、在哪里断。</h1>
+    <p class="lede">先亲手产生 Trace、Metric 和 Log，再拆解自动插桩、Context、Resource 和 NodeSDK 数据流。</p>
+    <div class="actions">
+      <a class="button primary" href="#start">开始学习</a>
+      <a class="button" href="https://github.com/dddddd889/otel-demo#1-启动">运行本地 Demo</a>
+      <a class="button" href="https://github.com/dddddd889/otel-demo">查看完整 README</a>
+    </div>
+  </header>
 
   <section>
-    <h2>学习路线</h2>
-    <div class="card">
-      <h3>1. <a href="lessons/0001-how-node-auto-instrumentation-works.html">自动插桩如何工作</a></h3>
-      <p>Instrumentation 何时 patch HTTP 模块，又如何创建 Active Span？</p>
+    <h2>这个站点帮你解决什么</h2>
+    <div class="guide-grid">
+      <article class="card compact">
+        <p class="step-label">WHAT · 学什么</p>
+        <h3>OpenTelemetry 全链路</h3>
+        <p>理解 Trace、Metric、Log 如何在 Node.js 应用、Collector 和后端之间流动。</p>
+      </article>
+      <article class="card compact">
+        <p class="step-label">WHY · 为什么学</p>
+        <h3>能自己定位没数据</h3>
+        <p>遇到 Trace 断了、日志没 Trace ID、Metric 查不到时，能判断问题在应用、SDK、Collector 还是存储端。</p>
+      </article>
+      <article class="card compact">
+        <p class="step-label">HOW · 怎么学</p>
+        <h3>用真实数据反推原理</h3>
+        <p>每课只解决一个问题，带可运行命令、预期结果和自测，不需要先背概念。</p>
+      </article>
     </div>
-    <div class="card">
-      <h3>2. <a href="lessons/0002-context-follows-async-work.html">AsyncLocalStorage 与 OTel Context</a></h3>
-      <p>并发请求为什么不会串 Trace，Context 又如何跨 HTTP 和 RabbitMQ？</p>
-    </div>
-    <div class="card">
-      <h3>3. <a href="lessons/0003-span-events-and-log-records.html">Span Event、LogRecord 与 recordException</a></h3>
-      <p>Event 记在哪里，LogRecord 走哪条管道，<code>recordException()</code> 到底生成什么？</p>
-    </div>
-    <div class="card">
-      <h3>4. <a href="lessons/0004-node-sdk-five-building-blocks.html">NodeSDK 的五个核心概念</a></h3>
-      <p>Resource、Trace、Metric、LogRecord 和 Instrumentation 分别在数据流的哪一层？</p>
+  </section>
+
+  <section id="start">
+    <p class="eyebrow">建议顺序</p>
+    <h2>两段式学习：先实战，后原理</h2>
+    <div class="path">
+      <article class="path-stage">
+        <span class="stage-number">A</span>
+        <div>
+          <h3>先运行全链路 Demo</h3>
+          <p>启动 checkout、inventory、payment 和可观测后端，产生一次请求，用同一个 Trace ID 在 Jaeger 和 Loki 中找到数据。</p>
+          <pre><code>npm install
+npm run infra:up
+npm start
+curl -i http://localhost:3000/checkout</code></pre>
+          <p><a href="https://github.com/dddddd889/otel-demo#1-启动">查看完整启动、造数和排障步骤 →</a></p>
+        </div>
+      </article>
+      <article class="path-stage">
+        <span class="stage-number">B</span>
+        <div>
+          <h3>再拆解 SDK 原理</h3>
+          <p>当你已经看过 Trace、Metric 和 Log，再按下面四课追问“这些数据是怎么来的”。</p>
+        </div>
+      </article>
     </div>
   </section>
 
   <section>
-    <h2>先记住这条主线</h2>
-    <pre><code>Instrumentation 或手动 API
+    <h2>原理课程路线</h2>
+    <p class="section-intro">不建议跳过前两课。自动插桩解决“谁创建 Span”，Context 解决“它为什么能连起来”。</p>
+    <ol class="course-list">
+      <li>
+        <a href="lessons/0001-how-node-auto-instrumentation-works.html"><span class="course-number">01</span><span><strong>自动插桩如何工作</strong><small>对比 baseline、手写 patch 和官方 HTTP instrumentation。</small></span></a>
+        <p>学完能回答：Instrumentation 何时 patch HTTP 模块，谁创建 Active Span？</p>
+      </li>
+      <li>
+        <a href="lessons/0002-context-follows-async-work.html"><span class="course-number">02</span><span><strong>AsyncLocalStorage 与 OTel Context</strong><small>用并发实验看全局变量串线，再看 Context 如何隔离。</small></span></a>
+        <p>学完能回答：并发请求为什么不会串 Trace，Context 如何跨 HTTP/MQ？</p>
+      </li>
+      <li>
+        <a href="lessons/0003-span-events-and-log-records.html"><span class="course-number">03</span><span><strong>Span Event、LogRecord 与 recordException</strong><small>区分 Span 内部的瞬间事件和独立日志信号。</small></span></a>
+        <p>学完能回答：Event 存在哪里，<code>recordException()</code> 产生 Event 还是 LogRecord？</p>
+      </li>
+      <li>
+        <a href="lessons/0004-node-sdk-five-building-blocks.html"><span class="course-number">04</span><span><strong>NodeSDK 的五个核心概念</strong><small>把 Resource、三种信号和 Instrumentation 放回同一条数据流。</small></span></a>
+        <p>学完能回答：哪些是遥测数据，哪些是来源身份或数据生产者？</p>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>始终用这条主线定位数据</h2>
+    <pre><code>业务请求
+  → Instrumentation 或手动 API
   → Span / Metric / LogRecord
-  → 附加 Resource
-  → Processor / Reader → Exporter → Collector
+  → 附加 Resource（service.name 等来源身份）
+  → Processor / Reader → Exporter
+  → OpenTelemetry Collector
   → Jaeger / Prometheus / Loki</code></pre>
+    <p class="card"><strong>一针见血的排查方法：</strong>从最后能看到数据的一层往后查。应用没产生，就查 Instrumentation/API；应用有数据但后端没有，就查 Exporter 和 Collector；后端有数据但查不到，就查 Resource 属性和查询条件。</p>
   </section>
 
-  <footer>
-    <a href="https://github.com/dddddd889/otel-demo">查看 GitHub 仓库</a>
-  </footer>
+  <section>
+    <h2>还想继续哪条路线</h2>
+    <div class="link-grid">
+      <a class="card link-card" href="https://github.com/dddddd889/otel-demo/blob/main/docs/async-messaging/README.md"><strong>RabbitMQ 异步传播</strong><span>从基础消息流到 Context、Producer/Consumer Span、重试和 DLQ。</span></a>
+      <a class="card link-card" href="https://github.com/dddddd889/otel-demo/blob/main/docs/commit-history/README.md"><strong>按 Commit 学习</strong><span>按仓库演进顺序理解每阶段加了什么、怎么验证。</span></a>
+      <a class="card link-card" href="https://github.com/dddddd889/otel-demo#功能清单"><strong>完整 README</strong><span>查看架构、故障场景、PromQL、LogQL、告警和全部测试命令。</span></a>
+    </div>
+  </section>
+
+  <footer>项目源码与完整运行说明：<a href="https://github.com/dddddd889/otel-demo">github.com/dddddd889/otel-demo</a></footer>
 </main>
 </body>
 </html>
