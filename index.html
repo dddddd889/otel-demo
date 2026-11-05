@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenTelemetry Node.js 原理学习路线</title>
+  <link rel="stylesheet" href="assets/lesson.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow">OpenTelemetry Node.js Demo</p>
+  <h1>从会用 Demo，到真正理解遥测数据如何产生和传递。</h1>
+  <p class="lede">按顺序学习自动插桩、Context、Span Event、LogRecord 和 NodeSDK 数据流。</p>
+
+  <section>
+    <h2>学习路线</h2>
+    <div class="card">
+      <h3>1. <a href="lessons/0001-how-node-auto-instrumentation-works.html">自动插桩如何工作</a></h3>
+      <p>Instrumentation 何时 patch HTTP 模块，又如何创建 Active Span？</p>
+    </div>
+    <div class="card">
+      <h3>2. <a href="lessons/0002-context-follows-async-work.html">AsyncLocalStorage 与 OTel Context</a></h3>
+      <p>并发请求为什么不会串 Trace，Context 又如何跨 HTTP 和 RabbitMQ？</p>
+    </div>
+    <div class="card">
+      <h3>3. <a href="lessons/0003-span-events-and-log-records.html">Span Event、LogRecord 与 recordException</a></h3>
+      <p>Event 记在哪里，LogRecord 走哪条管道，<code>recordException()</code> 到底生成什么？</p>
+    </div>
+    <div class="card">
+      <h3>4. <a href="lessons/0004-node-sdk-five-building-blocks.html">NodeSDK 的五个核心概念</a></h3>
+      <p>Resource、Trace、Metric、LogRecord 和 Instrumentation 分别在数据流的哪一层？</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>先记住这条主线</h2>
+    <pre><code>Instrumentation 或手动 API
+  → Span / Metric / LogRecord
+  → 附加 Resource
+  → Processor / Reader → Exporter → Collector
+  → Jaeger / Prometheus / Loki</code></pre>
+  </section>
+
+  <footer>
+    <a href="https://github.com/dddddd889/otel-demo">查看 GitHub 仓库</a>
+  </footer>
+</main>
+</body>
+</html>

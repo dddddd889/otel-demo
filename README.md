@@ -2,6 +2,8 @@
 
 这是一个 Node.js + OpenTelemetry 可观测性示例，通过 Jaeger、Prometheus、Loki 和 Grafana 统一体验分布式链路、指标、日志及三者关联。
 
+在线学习站点：<https://dddddd889.github.io/otel-demo/>
+
 按 Git 提交拆分的改动、测试和学习文档见 [按 Commit 学习 OpenTelemetry Demo](docs/commit-history/README.md)；异步消息支线见 [异步消息传播学习路线](docs/async-messaging/README.md)。
 
 ## OpenTelemetry 原理学习路线
